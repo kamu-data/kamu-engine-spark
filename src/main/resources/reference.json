@@ -1,0 +1,5 @@
+{
+  "rootDataDir": "data/root",
+  "dataDerivativeDir": "data/derivative",
+  "checkpointDir": "data/checkpoint"
+}
