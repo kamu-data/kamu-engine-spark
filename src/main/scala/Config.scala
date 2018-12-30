@@ -1,15 +1,23 @@
 import java.nio.file.Path
 
 
-case class Input(
+case class InputConfig(
   id: String,
   schemaName: String,
-  kind: String
+  kind: String = "root"
 )
 
 
-case class Output(
+case class OutputConfig(
   id: String
+)
+
+
+case class TransformConfig(
+  id: String,
+  inputs: Vector[InputConfig],
+  outputs: Vector[OutputConfig],
+  steps: Vector[String]
 )
 
 
@@ -17,6 +25,5 @@ case class AppConfig(
   dataRootDir: Path,
   dataDerivativeDir: Path,
   checkpointDir: Path,
-  input: Input,
-  output: Output
+  transforms: Vector[TransformConfig]
 )

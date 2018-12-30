@@ -1,5 +1,6 @@
 {
   "rootDataDir": "data/root",
   "dataDerivativeDir": "data/derivative",
-  "checkpointDir": "data/checkpoint"
+  "checkpointDir": "data/checkpoint",
+  "transforms": []
 }

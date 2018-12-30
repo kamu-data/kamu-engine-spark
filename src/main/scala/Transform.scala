@@ -1,43 +1,28 @@
-import java.nio.file.Path
-
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 
 class Transform(config: AppConfig) {
   val logger = LogManager.getLogger(getClass.getName)
 
   def transform(): Unit = {
-    logger.info("Starting transform")
+    logger.info("Starting transform.streaming")
     logger.info(s"Running with config: $config")
 
     val spark = SparkSession.builder
-      .appName(config.output.id)
+      .appName("transform.streaming")
       .getOrCreate()
 
-    val stream = spark.readStream
-      .schema(Schemas.schemas(config.input.schemaName))
-      .parquet(getInputPath(config.input).toString)
+    val tasks = config.transforms.map(tr => {
+      val task = new TransformTask(config, spark.newSession(), tr)
+      task.setupTransform()
+      task
+    })
 
-    stream.writeStream
-      .queryName(config.output.id)
-      .trigger(Trigger.ProcessingTime(0))
-      .outputMode(OutputMode.Append())
-      .format("parquet")
-      .option("checkpointLocation", config.checkpointDir.resolve(config.output.id).toString)
-      .option("path", config.dataDerivativeDir.resolve(config.output.id).toString)
-      .start()
-
+    logger.info("Stream processing is running")
     spark.streams.awaitAnyTermination()
-    spark.close()
-  }
 
-  private def getInputPath(input: Input): Path = {
-    input.kind match {
-      case "root" =>
-        config.dataRootDir.resolve(input.id)
-      case "derivative" =>
-        config.dataDerivativeDir.resolve(input.id)
-    }
+    logger.info("Terminating")
+    tasks.foreach(task => { task.spark.close() })
+    spark.close()
   }
 }
