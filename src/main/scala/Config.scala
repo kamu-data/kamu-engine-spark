@@ -2,14 +2,13 @@ import java.nio.file.Path
 
 
 case class InputConfig(
-  id: String,
-  schemaName: String,
-  kind: String = "root"
+  id: String
 )
 
 
 case class OutputConfig(
-  id: String
+  id: String,
+  partitionBy: Vector[String] = Vector.empty
 )
 
 

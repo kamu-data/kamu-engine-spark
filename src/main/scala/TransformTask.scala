@@ -1,8 +1,9 @@
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
+import org.apache.spark.sql.types.StructType
 
 class TransformTask(
   val config: AppConfig,
@@ -21,7 +22,7 @@ class TransformTask(
     logger.info(s"Registering input: ${input.id}")
 
     val inputStream = spark.readStream
-      .schema(Schemas.schemas(input.schemaName))
+      .schema(getInputSchema(input))
       .parquet(getInputPath(input).toString)
 
     inputStream.createTempView(s"`${input.id}`")
@@ -42,6 +43,7 @@ class TransformTask(
       .queryName(getQueryName(output))
       .trigger(Trigger.ProcessingTime(0))
       .outputMode(OutputMode.Append())
+      .partitionBy(output.partitionBy: _*)
       .option("path", config.dataDerivativeDir.resolve(output.id).toString)
       .option("checkpointLocation", config.checkpointDir.resolve(output.id).toString)
       .format("parquet")
@@ -49,15 +51,20 @@ class TransformTask(
   }
 
   private def getInputPath(input: InputConfig): Path = {
-    input.kind match {
-      case "root" =>
-        config.dataRootDir.resolve(input.id)
-      case "derivative" =>
-        config.dataDerivativeDir.resolve(input.id)
-    }
+    // TODO: Account for dependency graph between datasets
+    val derivativePath = config.dataDerivativeDir.resolve(input.id)
+    if (Files.exists(derivativePath))
+      derivativePath
+    else
+      config.dataRootDir.resolve(input.id)
   }
 
   private def getQueryName(output: OutputConfig): String = {
     s"{${transform.inputs.mkString(", ")}} -> ${output.id}"
+  }
+
+  private def getInputSchema(input: InputConfig): StructType = {
+    val ds = spark.read.parquet(getInputPath(input).toString)
+    ds.schema
   }
 }
