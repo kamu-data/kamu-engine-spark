@@ -25,6 +25,18 @@ object Schemas {
       StructField("timezone", StringType, true),           // the iana timezone id (see file timeZone.txt) varchar(40)
       StructField("modification_date", StringType, true)   // date of last modification in yyyy-MM-dd format
     )),
+    "alternateNames" -> StructType(Array(
+      StructField("alternateNameId", LongType, false),     // the id of this alternate name, int
+      StructField("geonameid", LongType, false),           // geonameId referring to id in table 'geoname', int
+      StructField("isolanguage", StringType, false),        // iso 639 language code 2- or 3-characters; 4-characters 'post' for postal codes and 'iata','icao' and faac for airport codes, fr_1793 for French Revolution names,  abbr for abbreviation, link to a website (mostly to wikipedia), wkdt for the wikidataid, varchar(7)
+      StructField("alternateName", StringType, false),     // alternate name or name variant, varchar(400)
+      StructField("isPreferredName", IntegerType, true),   // '1', if this alternate name is an official/preferred name
+      StructField("isShortName", IntegerType, true),       // '1', if this is a short name like 'California' for 'State of California'
+      StructField("isColloquial", IntegerType, true),      // '1', if this alternate name is a colloquial or slang term. Example: 'Big Apple' for 'New York'.
+      StructField("isHistoric", IntegerType, true),        // '1', if this alternate name is historic and was used in the past. Example 'Bombay' for 'Mumbai'.
+      StructField("from", StringType, true),               // from period when the name was used
+      StructField("to", StringType, true)                  // to period when the name was used
+    )),
     "location" -> StructType(Array(
       StructField("t", TimestampType, false),
       StructField("place", StringType, false),
