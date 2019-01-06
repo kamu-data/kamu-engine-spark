@@ -1,5 +1,8 @@
 import org.apache.log4j.LogManager
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.SparkSession
+import org.datasyslab.geospark.serde.GeoSparkKryoRegistrator
+import org.datasyslab.geosparksql.utils.GeoSparkSQLRegistrator
 
 class Transform(config: AppConfig) {
   val logger = LogManager.getLogger(getClass.getName)
@@ -10,10 +13,14 @@ class Transform(config: AppConfig) {
 
     val spark = SparkSession.builder
       .appName("transform.streaming")
+      // TODO: GeoSpark initialization
+      .config("spark.serializer", classOf[KryoSerializer].getName)
+      .config("spark.kryo.registrator", classOf[GeoSparkKryoRegistrator].getName)
+      //
       .getOrCreate()
 
     val tasks = config.transforms.map(tr => {
-      val task = new TransformTask(config, spark.newSession(), tr)
+      val task = new TransformTask(config, createSparkSubSession(spark), tr)
       task.setupTransform()
       task
     })
@@ -24,5 +31,11 @@ class Transform(config: AppConfig) {
     logger.info("Terminating")
     tasks.foreach(task => { task.spark.close() })
     spark.close()
+  }
+
+  def createSparkSubSession(sparkSession: SparkSession): SparkSession = {
+    val subSession = sparkSession.newSession()
+    GeoSparkSQLRegistrator.registerAll(subSession)
+    subSession
   }
 }

@@ -10,5 +10,9 @@ libraryDependencies ++= Seq(
 
   // Spark
   "org.apache.spark" %% "spark-core" % sparkVersion % "provided",
-  "org.apache.spark" %% "spark-sql" % sparkVersion % "provided"
+  "org.apache.spark" %% "spark-sql" % sparkVersion % "provided",
+
+  // GeoSpark
+  "org.datasyslab" % "geospark" % "1.1.3",
+  "org.datasyslab" % "geospark-sql_2.3" % "1.1.3"
 )
