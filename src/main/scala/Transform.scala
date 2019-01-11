@@ -20,13 +20,19 @@ class Transform(config: AppConfig) {
       .getOrCreate()
 
     val tasks = config.transforms.map(tr => {
-      val task = new TransformTask(config, createSparkSubSession(spark), tr)
+      val task = new TransformTask(
+        config=config,
+        spark=createSparkSubSession(spark),
+        transform=tr,
+        isStreaming = false)
+
       task.setupTransform()
       task
     })
 
     logger.info("Stream processing is running")
-    spark.streams.awaitAnyTermination()
+    if (spark.streams.active.length != 0)
+      spark.streams.awaitAnyTermination()
 
     logger.info("Terminating")
     tasks.foreach(task => { task.spark.close() })

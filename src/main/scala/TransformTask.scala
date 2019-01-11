@@ -1,14 +1,15 @@
 import java.nio.file.{Files, Path}
 
 import org.apache.log4j.LogManager
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.types.StructType
 
 class TransformTask(
   val config: AppConfig,
   val spark: SparkSession,
-  val transform: TransformConfig
+  val transform: TransformConfig,
+  val isStreaming: Boolean
 ) {
   val logger = LogManager.getLogger(getClass.getName)
 
@@ -21,9 +22,15 @@ class TransformTask(
   private def registerInputView(input: InputConfig): Unit = {
     logger.info(s"Registering input: ${input.id}")
 
-    val inputStream = spark.readStream
-      .schema(getInputSchema(input))
-      .parquet(getInputPath(input).toString)
+    val inputStream = if (isStreaming) {
+      spark.readStream
+        .schema(getInputSchema(input))
+        .parquet(getInputPath(input).toString)
+    } else {
+      spark.read
+        .schema(getInputSchema(input))
+        .parquet(getInputPath(input).toString)
+    }
 
     inputStream.createTempView(s"`${input.id}`")
   }
@@ -37,17 +44,27 @@ class TransformTask(
   private def registerOutput(output: OutputConfig): Unit = {
     logger.info(s"Registering output: ${output.id}")
 
+    val outputDir = config.dataDerivativeDir.resolve(output.id)
+    val checkpointDir = config.checkpointDir.resolve(output.id)
+
     val outputStream = spark.sql(s"SELECT * FROM `${output.id}`")
 
-    outputStream.writeStream
-      .queryName(getQueryName(output))
-      .trigger(Trigger.ProcessingTime(0))
-      .outputMode(OutputMode.Append())
-      .partitionBy(output.partitionBy: _*)
-      .option("path", config.dataDerivativeDir.resolve(output.id).toString)
-      .option("checkpointLocation", config.checkpointDir.resolve(output.id).toString)
-      .format("parquet")
-      .start()
+    if (isStreaming) {
+      outputStream.writeStream
+        .queryName(getQueryName(output))
+        .trigger(Trigger.ProcessingTime(0))
+        .outputMode(OutputMode.Append())
+        .partitionBy(output.partitionBy: _*)
+        .option("path", outputDir.toString)
+        .option("checkpointLocation", checkpointDir.toString)
+        .format("parquet")
+        .start()
+    } else {
+      outputStream.write
+        .mode(SaveMode.Append)
+        .partitionBy(output.partitionBy: _*)
+        .parquet(outputDir.toString)
+    }
   }
 
   private def getInputPath(input: InputConfig): Path = {
