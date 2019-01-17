@@ -1,6 +1,11 @@
 import java.nio.file.Path
 
 
+object OutputConfig {
+  val EVENT_TIME_COLUMN = "eventTime"
+}
+
+
 case class InputConfig(
   id: String
 )
