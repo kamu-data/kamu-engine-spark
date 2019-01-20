@@ -49,14 +49,6 @@ class TransformTask(
 
     val outputStream = spark.sql(s"SELECT * FROM `${output.id}`")
 
-    try {
-      outputStream.col(OutputConfig.EVENT_TIME_COLUMN)
-    } catch {
-      case _ :AnalysisException => throw new RuntimeException(
-        s"Event time column is missing: dataset=${output.id}, " +
-        s"column=${OutputConfig.EVENT_TIME_COLUMN}")
-    }
-
     if (isStreaming) {
       outputStream.writeStream
         .queryName(getQueryName(output))
