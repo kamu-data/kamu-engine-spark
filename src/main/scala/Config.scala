@@ -2,7 +2,15 @@ import java.nio.file.Path
 
 
 case class InputConfig(
-  id: String
+  id: String,
+
+  /*** Defines the mode in which this input should be open
+    *
+    * Valid values are:
+    *  - batch
+    *  - stream
+    */
+  mode: String = "stream"
 )
 
 

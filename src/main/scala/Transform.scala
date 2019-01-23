@@ -23,18 +23,21 @@ class Transform(config: AppConfig) {
       val task = new TransformTask(
         config=config,
         spark=createSparkSubSession(spark),
-        transform=tr,
-        isStreaming = false)
+        transform=tr)
 
       task.setupTransform()
       task
     })
 
     logger.info("Stream processing is running")
-    if (spark.streams.active.length != 0)
-      spark.streams.awaitAnyTermination()
 
-    logger.info("Terminating")
+    // TODO: Using processAllAvailable() to block until we exhaust data
+    // the use of this method is not recommended for prod
+    tasks
+      .flatMap(_.spark.streams.active)
+      .foreach(_.processAllAvailable())
+
+    logger.info("Finished")
     tasks.foreach(task => { task.spark.close() })
     spark.close()
   }

@@ -8,8 +8,7 @@ import org.apache.spark.sql.types.StructType
 class TransformTask(
   val config: AppConfig,
   val spark: SparkSession,
-  val transform: TransformConfig,
-  val isStreaming: Boolean
+  val transform: TransformConfig
 ) {
   val logger = LogManager.getLogger(getClass.getName)
 
@@ -22,14 +21,15 @@ class TransformTask(
   private def registerInputView(input: InputConfig): Unit = {
     logger.info(s"Registering input: ${input.id}")
 
-    val inputStream = if (isStreaming) {
-      spark.readStream
-        .schema(getInputSchema(input))
-        .parquet(getInputPath(input).toString)
-    } else {
-      spark.read
-        .schema(getInputSchema(input))
-        .parquet(getInputPath(input).toString)
+    val inputStream = input.mode.toLowerCase match {
+      case "stream" =>
+        spark.readStream
+          .schema(getInputSchema(input))
+          .parquet(getInputPath(input).toString)
+      case "batch" =>
+        spark.read
+          .schema(getInputSchema(input))
+          .parquet(getInputPath(input).toString)
     }
 
     inputStream.createTempView(s"`${input.id}`")
@@ -49,7 +49,9 @@ class TransformTask(
 
     val outputStream = spark.sql(s"SELECT * FROM `${output.id}`")
 
-    if (isStreaming) {
+    if (outputStream.isStreaming) {
+      logger.info(s"Starting streaming query for: ${output.id}")
+
       outputStream.writeStream
         .queryName(getQueryName(output))
         .trigger(Trigger.ProcessingTime(0))
@@ -60,6 +62,8 @@ class TransformTask(
         .format("parquet")
         .start()
     } else {
+      logger.info(s"Running batch processing for: ${output.id}")
+
       outputStream.write
         .mode(SaveMode.Append)
         .partitionBy(output.partitionBy: _*)
