@@ -1,29 +1,27 @@
+import org.apache.hadoop.fs.FileSystem
 import org.apache.log4j.LogManager
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.SparkSession
 import org.datasyslab.geospark.serde.GeoSparkKryoRegistrator
 import org.datasyslab.geosparksql.utils.GeoSparkSQLRegistrator
 
+
 class Transform(config: AppConfig) {
   val logger = LogManager.getLogger(getClass.getName)
+  val fileSystem = FileSystem.get(hadoopConf)
 
   def transform(): Unit = {
     logger.info("Starting transform.streaming")
     logger.info(s"Running with config: $config")
 
-    val spark = SparkSession.builder
-      .appName("transform.streaming")
-      // TODO: GeoSpark initialization
-      .config("spark.serializer", classOf[KryoSerializer].getName)
-      .config("spark.kryo.registrator", classOf[GeoSparkKryoRegistrator].getName)
-      //
-      .getOrCreate()
-
-    val tasks = config.transforms.map(tr => {
+    val tasks = config.transforms.map(transform => {
       val task = new TransformTask(
-        config=config,
-        spark=createSparkSubSession(spark),
-        transform=tr)
+        fileSystem,
+        config,
+        getSparkSubSession(sparkSession),
+        transform)
 
       task.setupTransform()
       task
@@ -39,10 +37,26 @@ class Transform(config: AppConfig) {
 
     logger.info("Finished")
     tasks.foreach(task => { task.spark.close() })
-    spark.close()
   }
 
-  def createSparkSubSession(sparkSession: SparkSession): SparkSession = {
+  def sparkConf: SparkConf = {
+    new SparkConf()
+      .setAppName("transform.streaming")
+      .set("spark.serializer", classOf[KryoSerializer].getName)
+      .set("spark.kryo.registrator", classOf[GeoSparkKryoRegistrator].getName)
+  }
+
+  def hadoopConf: org.apache.hadoop.conf.Configuration = {
+    SparkHadoopUtil.get.newConfiguration(sparkConf)
+  }
+
+  def sparkSession: SparkSession = {
+    SparkSession.builder
+      .config(sparkConf)
+      .getOrCreate()
+  }
+
+  def getSparkSubSession(sparkSession: SparkSession): SparkSession = {
     val subSession = sparkSession.newSession()
     GeoSparkSQLRegistrator.registerAll(subSession)
     subSession

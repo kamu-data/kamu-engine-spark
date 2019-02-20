@@ -1,14 +1,10 @@
-import pureconfig.{CamelCase, ConfigFieldMapping}
-import pureconfig.generic.ProductHint
-import pureconfig.generic.auto._
+import org.apache.log4j.LogManager
+
 
 object TransformApp {
   def main(args: Array[String]) {
-    implicit def hint[T]: ProductHint[T] =
-      ProductHint[T](ConfigFieldMapping(CamelCase, CamelCase))
-
-    val config = pureconfig.loadConfigOrThrow[AppConfig]
-
+    val logger = LogManager.getLogger(getClass.getName)
+    val config = AppConfig.load()
     val transform = new Transform(config)
     transform.transform()
   }

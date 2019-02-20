@@ -1,11 +1,13 @@
-import java.nio.file.{Files, Path}
-
+import FSUtils._
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{SaveMode, SparkSession}
+
 
 class TransformTask(
+  val fileSystem: FileSystem,
   val config: AppConfig,
   val spark: SparkSession,
   val transform: TransformConfig
@@ -74,7 +76,7 @@ class TransformTask(
   private def getInputPath(input: InputConfig): Path = {
     // TODO: Account for dependency graph between datasets
     val derivativePath = config.dataDerivativeDir.resolve(input.id)
-    if (Files.exists(derivativePath))
+    if (fileSystem.exists(derivativePath))
       derivativePath
     else
       config.dataRootDir.resolve(input.id)
