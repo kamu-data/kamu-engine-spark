@@ -42,8 +42,6 @@ class Transform(config: AppConfig) {
   def sparkConf: SparkConf = {
     new SparkConf()
       .setAppName("transform.streaming")
-      .set("spark.serializer", classOf[KryoSerializer].getName)
-      .set("spark.kryo.registrator", classOf[GeoSparkKryoRegistrator].getName)
   }
 
   def hadoopConf: org.apache.hadoop.conf.Configuration = {

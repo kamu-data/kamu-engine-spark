@@ -18,9 +18,9 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % Versions.spark % "provided",
   "org.apache.spark" %% "spark-sql" % Versions.spark % "provided",
 
-  // GeoSpark
-  "org.datasyslab" % "geospark" % "1.1.3",
-  "org.datasyslab" % "geospark-sql_2.3" % "1.1.3",
+  // GeoSpark (should be installed in your spark)
+  "org.datasyslab" % "geospark" % "1.1.3" % "provided",
+  "org.datasyslab" % "geospark-sql_2.3" % "1.1.3" % "provided",
 
   // Testing
   "org.scalatest" %% "scalatest" % "3.0.5" % "test",
