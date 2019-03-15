@@ -37,10 +37,9 @@ class TransformTask(
     inputStream.createTempView(s"`${input.id}`")
   }
 
-  private def registerStep(sqlString: String): Unit ={
-    logger.info(s"Registering step: $sqlString")
-
-    spark.sql(sqlString)
+  private def registerStep(step: StepConf): Unit ={
+    logger.info(s"Registering step ${step.view}: ${step.query}")
+    spark.sql(step.query).createTempView(s"`${step.view}`")
   }
 
   private def registerOutput(output: OutputConfig): Unit = {

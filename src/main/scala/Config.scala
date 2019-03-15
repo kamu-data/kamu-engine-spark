@@ -30,7 +30,13 @@ case class TransformConfig(
   id: String,
   inputs: Vector[InputConfig],
   outputs: Vector[OutputConfig],
-  steps: Vector[String]
+  steps: Vector[StepConf]
+)
+
+
+case class StepConf(
+  view: String,
+  query: String
 )
 
 
