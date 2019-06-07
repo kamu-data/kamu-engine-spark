@@ -1,5 +1,6 @@
-import org.apache.log4j.LogManager
+package dev.kamu.core.transform.streaming
 
+import org.apache.log4j.LogManager
 
 object TransformApp {
   def main(args: Array[String]) {

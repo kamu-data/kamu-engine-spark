@@ -1,3 +1,5 @@
+package dev.kamu.core.transform.streaming
+
 import org.apache.hadoop.fs.FileSystem
 import org.apache.log4j.LogManager
 import org.apache.spark.SparkConf
@@ -6,7 +8,6 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.SparkSession
 import org.datasyslab.geospark.serde.GeoSparkKryoRegistrator
 import org.datasyslab.geosparksql.utils.GeoSparkSQLRegistrator
-
 
 class Transform(config: AppConfig) {
   val logger = LogManager.getLogger(getClass.getName)
@@ -21,7 +22,8 @@ class Transform(config: AppConfig) {
         fileSystem,
         config,
         getSparkSubSession(sparkSession),
-        transform)
+        transform
+      )
 
       task.setupTransform()
       task

@@ -1,10 +1,11 @@
-import FSUtils._
+package dev.kamu.core.transform.streaming
+
+import dev.kamu.core.transform.streaming.FSUtils._
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{SaveMode, SparkSession}
-
 
 class TransformTask(
   val fileSystem: FileSystem,
@@ -37,7 +38,7 @@ class TransformTask(
     inputStream.createTempView(s"`${input.id}`")
   }
 
-  private def registerStep(step: StepConf): Unit ={
+  private def registerStep(step: StepConf): Unit = {
     logger.info(s"Registering step ${step.view}: ${step.query}")
     spark.sql(step.query).createTempView(s"`${step.view}`")
   }

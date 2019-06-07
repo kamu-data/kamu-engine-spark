@@ -1,15 +1,11 @@
+package dev.kamu.core.transform.streaming
+
 import java.net.URI
 
 import org.apache.hadoop.fs.Path
-import pureconfig.generic.ProductHint
-import pureconfig.module.yaml.loadYamlOrThrow
-import pureconfig.{CamelCase, ConfigFieldMapping, ConfigReader}
-import pureconfig.generic.auto._
-
 
 case class InputConfig(
   id: String,
-
   /*** Defines the mode in which this input should be open
     *
     * Valid values are:
@@ -19,12 +15,10 @@ case class InputConfig(
   mode: String = "stream"
 )
 
-
 case class OutputConfig(
   id: String,
   partitionBy: Vector[String] = Vector.empty
 )
-
 
 case class TransformConfig(
   id: String,
@@ -33,12 +27,10 @@ case class TransformConfig(
   steps: Vector[StepConf]
 )
 
-
 case class StepConf(
   view: String,
   query: String
 )
-
 
 case class AppConfig(
   dataRootDir: Path,
@@ -47,8 +39,12 @@ case class AppConfig(
   transforms: Vector[TransformConfig]
 )
 
-
 object AppConfig {
+  import pureconfig.generic.auto._
+  import pureconfig.generic.ProductHint
+  import pureconfig.module.yaml.loadYamlOrThrow
+  import pureconfig.{CamelCase, ConfigFieldMapping, ConfigReader}
+
   val configFileName = "transform-config.yaml"
 
   // Reader for hadoop fs paths
@@ -60,10 +56,12 @@ object AppConfig {
     ProductHint[T](ConfigFieldMapping(CamelCase, CamelCase))
 
   def load(): AppConfig = {
-    val configStream = getClass.getClassLoader.getResourceAsStream(configFileName)
+    val configStream =
+      getClass.getClassLoader.getResourceAsStream(configFileName)
     if (configStream == null)
       throw new RuntimeException(
-        s"Unable to locate $configFileName on classpath")
+        s"Unable to locate $configFileName on classpath"
+      )
 
     val configString = scala.io.Source.fromInputStream(configStream).mkString
     val config = loadYamlOrThrow[AppConfig](configString)

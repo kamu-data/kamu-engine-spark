@@ -1,3 +1,5 @@
+package dev.kamu.core.transform.streaming
+
 import org.apache.hadoop.fs.Path
 
 object FSUtils {
