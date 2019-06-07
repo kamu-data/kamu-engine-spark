@@ -1,5 +1,10 @@
 package dev.kamu.core.transform.streaming
 
+import dev.kamu.core.manifests.{
+  ProcessingStepSQL,
+  TransformStreaming,
+  TransformStreamingInput
+}
 import dev.kamu.core.transform.streaming.FSUtils._
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
@@ -11,17 +16,17 @@ class TransformTask(
   val fileSystem: FileSystem,
   val config: AppConfig,
   val spark: SparkSession,
-  val transform: TransformConfig
+  val transform: TransformStreaming
 ) {
   val logger = LogManager.getLogger(getClass.getName)
 
   def setupTransform(): Unit = {
     transform.inputs.foreach(registerInputView)
     transform.steps.foreach(registerStep)
-    transform.outputs.foreach(registerOutput)
+    registerOutput()
   }
 
-  private def registerInputView(input: InputConfig): Unit = {
+  private def registerInputView(input: TransformStreamingInput): Unit = {
     logger.info(s"Registering input: ${input.id}")
 
     val inputStream = input.mode.toLowerCase match {
@@ -38,55 +43,55 @@ class TransformTask(
     inputStream.createTempView(s"`${input.id}`")
   }
 
-  private def registerStep(step: StepConf): Unit = {
+  private def registerStep(step: ProcessingStepSQL): Unit = {
     logger.info(s"Registering step ${step.view}: ${step.query}")
     spark.sql(step.query).createTempView(s"`${step.view}`")
   }
 
-  private def registerOutput(output: OutputConfig): Unit = {
-    logger.info(s"Registering output: ${output.id}")
+  private def registerOutput(): Unit = {
+    logger.info(s"Registering output: ${transform.id}")
 
-    val outputDir = config.dataDerivativeDir.resolve(output.id)
-    val checkpointDir = config.checkpointDir.resolve(output.id)
+    val outputDir = config.repository.dataDirDeriv.resolve(transform.id)
+    val checkpointDir = config.repository.checkpointDir.resolve(transform.id)
 
-    val outputStream = spark.sql(s"SELECT * FROM `${output.id}`")
+    val outputStream = spark.sql(s"SELECT * FROM `${transform.id}`")
 
     if (outputStream.isStreaming) {
-      logger.info(s"Starting streaming query for: ${output.id}")
+      logger.info(s"Starting streaming query for: ${transform.id}")
 
       outputStream.writeStream
-        .queryName(getQueryName(output))
+        .queryName(getQueryName)
         .trigger(Trigger.ProcessingTime(0))
         .outputMode(OutputMode.Append())
-        .partitionBy(output.partitionBy: _*)
+        .partitionBy(transform.partitionBy: _*)
         .option("path", outputDir.toString)
         .option("checkpointLocation", checkpointDir.toString)
         .format("parquet")
         .start()
     } else {
-      logger.info(s"Running batch processing for: ${output.id}")
+      logger.info(s"Running batch processing for: ${transform.id}")
 
       outputStream.write
         .mode(SaveMode.Append)
-        .partitionBy(output.partitionBy: _*)
+        .partitionBy(transform.partitionBy: _*)
         .parquet(outputDir.toString)
     }
   }
 
-  private def getInputPath(input: InputConfig): Path = {
+  private def getInputPath(input: TransformStreamingInput): Path = {
     // TODO: Account for dependency graph between datasets
-    val derivativePath = config.dataDerivativeDir.resolve(input.id)
+    val derivativePath = config.repository.dataDirDeriv.resolve(input.id)
     if (fileSystem.exists(derivativePath))
       derivativePath
     else
-      config.dataRootDir.resolve(input.id)
+      config.repository.dataDirRoot.resolve(input.id)
   }
 
-  private def getQueryName(output: OutputConfig): String = {
-    s"{${transform.inputs.mkString(", ")}} -> ${output.id}"
+  private def getQueryName: String = {
+    s"{${transform.inputs.mkString(", ")}} -> ${transform.id}"
   }
 
-  private def getInputSchema(input: InputConfig): StructType = {
+  private def getInputSchema(input: TransformStreamingInput): StructType = {
     val ds = spark.read.parquet(getInputPath(input).toString)
     ds.schema
   }
