@@ -10,7 +10,7 @@ import dev.kamu.core.manifests.{
 
 case class AppConfig(
   repository: RepositoryVolumeMap,
-  transforms: Vector[TransformStreaming]
+  transforms: List[TransformStreaming]
 )
 
 object AppConfig {
@@ -19,14 +19,9 @@ object AppConfig {
   import pureconfig.generic.auto._
 
   val repositoryConfigFile = "repositoryVolumeMap.yaml"
-  val transformStreamingConfigFile = "transformStreaming.yaml"
 
   def load(): AppConfig = {
-    val transform = yaml
-      .load[Manifest[TransformStreaming]](
-        getConfigFromResources(transformStreamingConfigFile)
-      )
-      .content
+    val transforms = findSources()
 
     val repository = yaml
       .load[Manifest[RepositoryVolumeMap]](
@@ -36,10 +31,27 @@ object AppConfig {
 
     val appConfig = AppConfig(
       repository = repository,
-      transforms = Vector(transform)
+      transforms = transforms
     )
 
     appConfig
+  }
+
+  // TODO: This sucks, but searching resources via pattern in Java is a pain
+  private def findSources(
+    index: Int = 0,
+    tail: List[TransformStreaming] = List.empty
+  ): List[TransformStreaming] = {
+    val stream = getClass.getClassLoader.getResourceAsStream(
+      s"transformStreaming_$index.yaml"
+    )
+
+    if (stream == null) {
+      tail.reverse
+    } else {
+      val source = yaml.load[Manifest[TransformStreaming]](stream).content
+      findSources(index + 1, source :: tail)
+    }
   }
 
   private def getConfigFromResources(configFileName: String): InputStream = {
