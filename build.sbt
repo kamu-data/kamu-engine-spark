@@ -19,8 +19,8 @@ lazy val kamuCoreTransformStreaming = (project in file("."))
       "org.apache.spark" %% "spark-core" % Versions.spark % "provided",
       "org.apache.spark" %% "spark-sql" % Versions.spark % "provided",
       // GeoSpark
-      "org.datasyslab" % "geospark" % "1.2.0",
-      "org.datasyslab" % "geospark-sql_2.3" % "1.2.0",
+      "org.datasyslab" % "geospark" % Versions.geoSpark % "provided",
+      "org.datasyslab" % "geospark-sql_2.3" % Versions.geoSpark % "provided",
       // Testing
       "org.scalatest" %% "scalatest" % "3.0.5" % "test",
       "com.holdenkarau" %% "spark-testing-base" % s"${Versions.spark}_0.11.0" % "test",
