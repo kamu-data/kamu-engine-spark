@@ -51,8 +51,10 @@ class TransformTask(
   private def registerOutput(): Unit = {
     logger.info(s"Registering output: ${transform.id}")
 
-    val outputDir = config.repository.dataDirDeriv.resolve(transform.id)
-    val checkpointDir = config.repository.checkpointDir.resolve(transform.id)
+    val outputDir =
+      config.repository.dataDirDeriv.resolve(transform.id.toString)
+    val checkpointDir =
+      config.repository.checkpointDir.resolve(transform.id.toString)
 
     val outputStream = spark.sql(s"SELECT * FROM `${transform.id}`")
 
@@ -80,11 +82,12 @@ class TransformTask(
 
   private def getInputPath(input: TransformStreamingInput): Path = {
     // TODO: Account for dependency graph between datasets
-    val derivativePath = config.repository.dataDirDeriv.resolve(input.id)
+    val derivativePath =
+      config.repository.dataDirDeriv.resolve(input.id.toString)
     if (fileSystem.exists(derivativePath))
       derivativePath
     else
-      config.repository.dataDirRoot.resolve(input.id)
+      config.repository.dataDirRoot.resolve(input.id.toString)
   }
 
   private def getQueryName: String = {
