@@ -13,8 +13,8 @@ lazy val kamuCoreTransformStreaming = (project in file("."))
       // Internal
       "dev.kamu" %% "kamu-core-manifests" % "0.1.0-SNAPSHOT",
       // Config
-      "com.github.pureconfig" %% "pureconfig" % "0.10.2",
-      "com.github.pureconfig" %% "pureconfig-yaml" % "0.10.2",
+      "com.github.pureconfig" %% "pureconfig" % "0.11.1",
+      "com.github.pureconfig" %% "pureconfig-yaml" % "0.11.1",
       // Spark
       "org.apache.spark" %% "spark-core" % Versions.spark % "provided",
       "org.apache.spark" %% "spark-sql" % Versions.spark % "provided",

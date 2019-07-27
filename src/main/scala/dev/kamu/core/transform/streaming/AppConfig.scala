@@ -2,15 +2,11 @@ package dev.kamu.core.transform.streaming
 
 import java.io.InputStream
 
-import dev.kamu.core.manifests.{
-  Manifest,
-  RepositoryVolumeMap,
-  TransformStreaming
-}
+import dev.kamu.core.manifests.{Dataset, Manifest, RepositoryVolumeMap}
 
 case class AppConfig(
   repository: RepositoryVolumeMap,
-  transforms: List[TransformStreaming]
+  datasets: List[Dataset]
 )
 
 object AppConfig {
@@ -21,7 +17,7 @@ object AppConfig {
   val repositoryConfigFile = "repositoryVolumeMap.yaml"
 
   def load(): AppConfig = {
-    val transforms = findSources()
+    val datasets = findSources()
 
     val repository = yaml
       .load[Manifest[RepositoryVolumeMap]](
@@ -31,7 +27,7 @@ object AppConfig {
 
     val appConfig = AppConfig(
       repository = repository,
-      transforms = transforms
+      datasets = datasets
     )
 
     appConfig
@@ -40,17 +36,21 @@ object AppConfig {
   // TODO: This sucks, but searching resources via pattern in Java is a pain
   private def findSources(
     index: Int = 0,
-    tail: List[TransformStreaming] = List.empty
-  ): List[TransformStreaming] = {
+    tail: List[Dataset] = List.empty
+  ): List[Dataset] = {
     val stream = getClass.getClassLoader.getResourceAsStream(
-      s"transformStreaming_$index.yaml"
+      s"dataset_$index.yaml"
     )
 
     if (stream == null) {
       tail.reverse
     } else {
-      val source = yaml.load[Manifest[TransformStreaming]](stream).content
-      findSources(index + 1, source :: tail)
+      val ds = yaml.load[Manifest[Dataset]](stream).content
+      if (ds.derivativeSource.isEmpty)
+        throw new RuntimeException(
+          s"Expected a derivative datasets, got ${ds.kind}"
+        )
+      findSources(index + 1, ds :: tail)
     }
   }
 

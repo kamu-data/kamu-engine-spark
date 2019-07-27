@@ -1,9 +1,10 @@
 package dev.kamu.core.transform.streaming
 
 import dev.kamu.core.manifests.{
-  ProcessingStepSQL,
-  TransformStreaming,
-  TransformStreamingInput
+  Dataset,
+  DerivativeSource,
+  DerivativeInput,
+  ProcessingStepSQL
 }
 import dev.kamu.core.manifests.utils.fs._
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -16,9 +17,11 @@ class TransformTask(
   val fileSystem: FileSystem,
   val config: AppConfig,
   val spark: SparkSession,
-  val transform: TransformStreaming
+  val dataset: Dataset
 ) {
   val logger = LogManager.getLogger(getClass.getName)
+
+  val transform = dataset.derivativeSource.get
 
   def setupTransform(): Unit = {
     transform.inputs.foreach(registerInputView)
@@ -26,15 +29,15 @@ class TransformTask(
     registerOutput()
   }
 
-  private def registerInputView(input: TransformStreamingInput): Unit = {
+  private def registerInputView(input: DerivativeInput): Unit = {
     logger.info(s"Registering input: ${input.id}")
 
-    val inputStream = input.mode.toLowerCase match {
-      case "stream" =>
+    val inputStream = input.mode match {
+      case DerivativeInput.Mode.Stream =>
         spark.readStream
           .schema(getInputSchema(input))
           .parquet(getInputPath(input).toString)
-      case "batch" =>
+      case DerivativeInput.Mode.Batch =>
         spark.read
           .schema(getInputSchema(input))
           .parquet(getInputPath(input).toString)
@@ -49,17 +52,17 @@ class TransformTask(
   }
 
   private def registerOutput(): Unit = {
-    logger.info(s"Registering output: ${transform.id}")
+    logger.info(s"Registering output: ${dataset.id}")
 
     val outputDir =
-      config.repository.dataDirDeriv.resolve(transform.id.toString)
+      config.repository.dataDirDeriv.resolve(dataset.id.toString)
     val checkpointDir =
-      config.repository.checkpointDir.resolve(transform.id.toString)
+      config.repository.checkpointDir.resolve(dataset.id.toString)
 
-    val outputStream = spark.sql(s"SELECT * FROM `${transform.id}`")
+    val outputStream = spark.sql(s"SELECT * FROM `${dataset.id}`")
 
     if (outputStream.isStreaming) {
-      logger.info(s"Starting streaming query for: ${transform.id}")
+      logger.info(s"Starting streaming query for: ${dataset.id}")
 
       outputStream.writeStream
         .queryName(getQueryName)
@@ -71,7 +74,7 @@ class TransformTask(
         .format("parquet")
         .start()
     } else {
-      logger.info(s"Running batch processing for: ${transform.id}")
+      logger.info(s"Running batch processing for: ${dataset.id}")
 
       outputStream.write
         .mode(SaveMode.Append)
@@ -80,7 +83,7 @@ class TransformTask(
     }
   }
 
-  private def getInputPath(input: TransformStreamingInput): Path = {
+  private def getInputPath(input: DerivativeInput): Path = {
     // TODO: Account for dependency graph between datasets
     val derivativePath =
       config.repository.dataDirDeriv.resolve(input.id.toString)
@@ -91,10 +94,10 @@ class TransformTask(
   }
 
   private def getQueryName: String = {
-    s"{${transform.inputs.mkString(", ")}} -> ${transform.id}"
+    s"{${transform.inputs.mkString(", ")}} -> ${dataset.id}"
   }
 
-  private def getInputSchema(input: TransformStreamingInput): StructType = {
+  private def getInputSchema(input: DerivativeInput): StructType = {
     val ds = spark.read.parquet(getInputPath(input).toString)
     ds.schema
   }

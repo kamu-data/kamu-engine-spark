@@ -17,12 +17,12 @@ class Transform(config: AppConfig) {
     logger.info("Starting transform.streaming")
     logger.info(s"Running with config: $config")
 
-    val tasks = config.transforms.map(transform => {
+    val tasks = config.datasets.map(dataset => {
       val task = new TransformTask(
         fileSystem,
         config,
         getSparkSubSession(sparkSession),
-        transform
+        dataset
       )
 
       task.setupTransform()
