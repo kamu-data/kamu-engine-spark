@@ -2,10 +2,10 @@ package dev.kamu.core.transform.streaming
 
 import java.io.InputStream
 
-import dev.kamu.core.manifests.{Dataset, Manifest, RepositoryVolumeMap}
+import dev.kamu.core.manifests.{Dataset, Manifest, VolumeMap}
 
 case class AppConfig(
-  repository: RepositoryVolumeMap,
+  volumeMap: VolumeMap,
   datasets: List[Dataset]
 )
 
@@ -19,14 +19,14 @@ object AppConfig {
   def load(): AppConfig = {
     val datasets = findSources()
 
-    val repository = yaml
-      .load[Manifest[RepositoryVolumeMap]](
+    val volumeMap = yaml
+      .load[Manifest[VolumeMap]](
         getConfigFromResources(repositoryConfigFile)
       )
       .content
 
     val appConfig = AppConfig(
-      repository = repository,
+      volumeMap = volumeMap,
       datasets = datasets
     )
 

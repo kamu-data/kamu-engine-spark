@@ -1,11 +1,6 @@
 package dev.kamu.core.transform.streaming
 
-import dev.kamu.core.manifests.{
-  Dataset,
-  DerivativeSource,
-  DerivativeInput,
-  ProcessingStepSQL
-}
+import dev.kamu.core.manifests.{Dataset, DerivativeInput, ProcessingStepSQL}
 import dev.kamu.core.manifests.utils.fs._
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
@@ -55,9 +50,9 @@ class TransformTask(
     logger.info(s"Registering output: ${dataset.id}")
 
     val outputDir =
-      config.repository.dataDirDeriv.resolve(dataset.id.toString)
+      config.volumeMap.dataDirDeriv.resolve(dataset.id.toString)
     val checkpointDir =
-      config.repository.checkpointDir.resolve(dataset.id.toString)
+      config.volumeMap.checkpointDir.resolve(dataset.id.toString)
 
     val outputStream = spark.sql(s"SELECT * FROM `${dataset.id}`")
 
@@ -86,11 +81,11 @@ class TransformTask(
   private def getInputPath(input: DerivativeInput): Path = {
     // TODO: Account for dependency graph between datasets
     val derivativePath =
-      config.repository.dataDirDeriv.resolve(input.id.toString)
+      config.volumeMap.dataDirDeriv.resolve(input.id.toString)
     if (fileSystem.exists(derivativePath))
       derivativePath
     else
-      config.repository.dataDirRoot.resolve(input.id.toString)
+      config.volumeMap.dataDirRoot.resolve(input.id.toString)
   }
 
   private def getQueryName: String = {
