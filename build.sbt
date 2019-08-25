@@ -8,10 +8,9 @@ lazy val kamuCoreTransformStreaming = (project in file("."))
     organization := "dev.kamu",
     organizationName := "kamu",
     name := "kamu-core-transform-streaming",
-    version := "0.1.0-SNAPSHOT",
     libraryDependencies ++= Seq(
       // Internal
-      "dev.kamu" %% "kamu-core-manifests" % "0.1.0-SNAPSHOT",
+      "dev.kamu" %% "kamu-core-manifests" % "0.1.0",
       // Config
       "com.github.pureconfig" %% "pureconfig" % "0.11.1",
       "com.github.pureconfig" %% "pureconfig-yaml" % "0.11.1",
