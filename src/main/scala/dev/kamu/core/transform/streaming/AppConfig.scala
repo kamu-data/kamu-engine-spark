@@ -2,56 +2,31 @@ package dev.kamu.core.transform.streaming
 
 import java.io.InputStream
 
-import dev.kamu.core.manifests.{Dataset, Manifest, VolumeMap}
+import dev.kamu.core.manifests.{Dataset, Manifest, Resource}
+import org.apache.hadoop.fs.Path
+
+case class TransformTaskConfig(
+  datasetToTransform: Dataset,
+  inputDataPaths: Map[String, Path],
+  checkpointsPath: Path,
+  outputDataPath: Path
+) extends Resource[TransformTaskConfig]
 
 case class AppConfig(
-  volumeMap: VolumeMap,
-  datasets: List[Dataset]
-)
+  tasks: Vector[TransformTaskConfig]
+) extends Resource[AppConfig]
 
 object AppConfig {
   import dev.kamu.core.manifests.parsing.pureconfig.yaml
   import yaml.defaults._
   import pureconfig.generic.auto._
 
-  val repositoryConfigFile = "repositoryVolumeMap.yaml"
+  val configFileName = "transformConfig.yaml"
 
   def load(): AppConfig = {
-    val datasets = findSources()
-
-    val volumeMap = yaml
-      .load[Manifest[VolumeMap]](
-        getConfigFromResources(repositoryConfigFile)
-      )
+    yaml
+      .load[Manifest[AppConfig]](getConfigFromResources(configFileName))
       .content
-
-    val appConfig = AppConfig(
-      volumeMap = volumeMap,
-      datasets = datasets
-    )
-
-    appConfig
-  }
-
-  // TODO: This sucks, but searching resources via pattern in Java is a pain
-  private def findSources(
-    index: Int = 0,
-    tail: List[Dataset] = List.empty
-  ): List[Dataset] = {
-    val stream = getClass.getClassLoader.getResourceAsStream(
-      s"dataset_$index.yaml"
-    )
-
-    if (stream == null) {
-      tail.reverse
-    } else {
-      val ds = yaml.load[Manifest[Dataset]](stream).content
-      if (ds.derivativeSource.isEmpty)
-        throw new RuntimeException(
-          s"Expected a derivative datasets, got ${ds.kind}"
-        )
-      findSources(index + 1, ds :: tail)
-    }
   }
 
   private def getConfigFromResources(configFileName: String): InputStream = {

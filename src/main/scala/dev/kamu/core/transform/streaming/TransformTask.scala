@@ -1,7 +1,6 @@
 package dev.kamu.core.transform.streaming
 
-import dev.kamu.core.manifests.{Dataset, DerivativeInput, ProcessingStepSQL}
-import dev.kamu.core.manifests.utils.fs._
+import dev.kamu.core.manifests.{DerivativeInput, ProcessingStepSQL}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
@@ -12,11 +11,11 @@ class TransformTask(
   val fileSystem: FileSystem,
   val config: AppConfig,
   val spark: SparkSession,
-  val dataset: Dataset
+  val taskConfig: TransformTaskConfig
 ) {
   val logger = LogManager.getLogger(getClass.getName)
 
-  val transform = dataset.derivativeSource.get
+  val transform = taskConfig.datasetToTransform.derivativeSource.get
 
   def setupTransform(): Unit = {
     transform.inputs.foreach(registerInputView)
@@ -47,12 +46,9 @@ class TransformTask(
   }
 
   private def registerOutput(): Unit = {
-    logger.info(s"Registering output: ${dataset.id}")
+    val dataset = taskConfig.datasetToTransform
 
-    val outputDir =
-      config.volumeMap.dataDirDeriv.resolve(dataset.id.toString)
-    val checkpointDir =
-      config.volumeMap.checkpointDir.resolve(dataset.id.toString)
+    logger.info(s"Registering output: ${dataset.id}")
 
     val outputStream = spark.sql(s"SELECT * FROM `${dataset.id}`")
 
@@ -64,8 +60,8 @@ class TransformTask(
         .trigger(Trigger.ProcessingTime(0))
         .outputMode(OutputMode.Append())
         .partitionBy(transform.partitionBy: _*)
-        .option("path", outputDir.toString)
-        .option("checkpointLocation", checkpointDir.toString)
+        .option("path", taskConfig.outputDataPath.toString)
+        .option("checkpointLocation", taskConfig.checkpointsPath.toString)
         .format("parquet")
         .start()
     } else {
@@ -74,22 +70,16 @@ class TransformTask(
       outputStream.write
         .mode(SaveMode.Append)
         .partitionBy(transform.partitionBy: _*)
-        .parquet(outputDir.toString)
+        .parquet(taskConfig.outputDataPath.toString)
     }
   }
 
   private def getInputPath(input: DerivativeInput): Path = {
-    // TODO: Account for dependency graph between datasets
-    val derivativePath =
-      config.volumeMap.dataDirDeriv.resolve(input.id.toString)
-    if (fileSystem.exists(derivativePath))
-      derivativePath
-    else
-      config.volumeMap.dataDirRoot.resolve(input.id.toString)
+    taskConfig.inputDataPaths(input.id.toString)
   }
 
   private def getQueryName: String = {
-    s"{${transform.inputs.mkString(", ")}} -> ${dataset.id}"
+    s"{${transform.inputs.mkString(", ")}} -> ${taskConfig.datasetToTransform.id}"
   }
 
   private def getInputSchema(input: DerivativeInput): StructType = {
