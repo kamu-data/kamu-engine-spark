@@ -10,16 +10,14 @@ package dev.kamu.core.transform.streaming
 
 import java.sql.Timestamp
 
-import com.holdenkarau.spark.testing.DataFrameSuiteBase
+import dev.kamu.core.utils.test.KamuDataFrameSuite
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.OutputMode
 import org.scalatest.FunSuite
 
-class StreamJoinTest extends FunSuite with DataFrameSuiteBase {
+class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
   import spark.implicits._
-
-  protected override val enableHiveSupport = false
 
   def ts(year: Int = 0, month: Int = 1, day: Int = 1): Timestamp =
     Timestamp.valueOf(f"2$year%03d-$month%02d-$day%02d 00:00:00")

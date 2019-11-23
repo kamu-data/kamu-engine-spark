@@ -10,15 +10,14 @@ package dev.kamu.core.transform.streaming
 
 import java.sql.Timestamp
 
+import dev.kamu.core.utils.test.KamuDataFrameSuite
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.OutputMode
 import org.scalatest.FunSuite
 
-class TemporalJoinTest extends FunSuite with DataFrameSuiteBaseEx {
+class TemporalJoinTest extends FunSuite with KamuDataFrameSuite {
   import spark.implicits._
-
-  protected override val enableHiveSupport = false
 
   def now(): Timestamp = {
     new Timestamp(System.currentTimeMillis())
