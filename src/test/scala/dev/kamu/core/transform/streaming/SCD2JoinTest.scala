@@ -19,9 +19,6 @@ import org.scalatest.FunSuite
 class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
   import spark.implicits._
 
-  def ts(year: Int = 0, month: Int = 1, day: Int = 1): Timestamp =
-    Timestamp.valueOf(f"2$year%03d-$month%02d-$day%02d 00:00:00")
-
   def toSCD2(df: DataFrame): DataFrame = {
     df.selectExpr(
         "*",
