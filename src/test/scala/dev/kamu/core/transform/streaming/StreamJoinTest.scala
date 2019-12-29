@@ -28,7 +28,7 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(3), "A")
         )
       )
-      .toDF("eventTime", "city")
+      .toDF("event_time", "city")
     fact.createOrReplaceTempView("fact")
 
     val dim = sc
@@ -41,25 +41,25 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(4), "A", 5)
         )
       )
-      .toDF("eventTime", "city", "population")
+      .toDF("event_time", "city", "population")
     dim.createOrReplaceTempView("dim")
 
     val result = spark.sql("""
-      SELECT fact.eventTime, fact.city, dim.population
+      SELECT fact.event_time, fact.city, dim.population
       FROM fact
       LEFT JOIN dim
         ON fact.city = dim.city
-          AND dim.eventTime <= fact.eventTime
+          AND dim.event_time <= fact.event_time
       LEFT JOIN dim as dim2
         ON fact.city = dim2.city
-          AND dim2.eventTime <= fact.eventTime
-          AND dim2.eventTime > dim.eventTime
-      WHERE dim2.eventTime IS NULL
-    """).orderBy("eventTime")
+          AND dim2.event_time <= fact.event_time
+          AND dim2.event_time > dim.event_time
+      WHERE dim2.event_time IS NULL
+    """).orderBy("event_time")
 
-    /* Before WHERE d2.eventTime IS NULL
+    /* Before WHERE d2.event_time IS NULL
     +-------------------+----+----------+-------------------+-------------------+
-    |          eventTime|city|population|                 d1|                 d2|
+    |         event_time|city|population|                 d1|                 d2|
     +-------------------+----+----------+-------------------+-------------------+
     |2001-01-01 00:00:00|   A|         1|2000-01-01 00:00:00|               null|
     |2002-01-01 00:00:00|   B|         2|2000-01-01 00:00:00|2001-01-01 00:00:00|
@@ -77,7 +77,7 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(3), "A", Some(4))
         )
       )
-      .toDF("eventTime", "city", "population")
+      .toDF("event_time", "city", "population")
 
     assertDataFrameEquals(expected, result)
   }
@@ -87,7 +87,7 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
     val fact = factMem
       .toDF()
       .selectExpr(
-        "cast(split(value, ',')[0] as timestamp) as eventTime",
+        "cast(split(value, ',')[0] as timestamp) as event_time",
         "split(value, ',')[1] as city"
       )
     fact.createOrReplaceTempView("fact")
@@ -106,20 +106,20 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(4), "A", 5)
         )
       )
-      .toDF("eventTime", "city", "population")
+      .toDF("event_time", "city", "population")
     dim.createOrReplaceTempView("dim")
 
     val transform = spark.sql("""
-      SELECT fact.eventTime, fact.city, dim.population
+      SELECT fact.event_time, fact.city, dim.population
       FROM fact
       LEFT JOIN dim
         ON fact.city = dim.city
-          AND dim.eventTime <= fact.eventTime
+          AND dim.event_time <= fact.event_time
       LEFT JOIN dim as dim2
         ON fact.city = dim2.city
-          AND dim2.eventTime <= fact.eventTime
-          AND dim2.eventTime > dim.eventTime
-      WHERE dim2.eventTime IS NULL
+          AND dim2.event_time <= fact.event_time
+          AND dim2.event_time > dim.event_time
+      WHERE dim2.event_time IS NULL
     """)
 
     val query = transform.writeStream
@@ -151,7 +151,7 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(3), "A", Some(4))
         )
       )
-      .toDF("eventTime", "city", "population")
+      .toDF("event_time", "city", "population")
 
     assertDataFrameEquals(expected, result)
   }
@@ -161,10 +161,10 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
     val fact = factMem
       .toDF()
       .selectExpr(
-        "cast(split(value, ',')[0] as timestamp) as eventTime",
+        "cast(split(value, ',')[0] as timestamp) as event_time",
         "split(value, ',')[1] as city"
       )
-      .withWatermark("eventTime", "1 minute")
+      .withWatermark("event_time", "1 minute")
     fact.createOrReplaceTempView("fact")
 
     def addFact(t: Timestamp, city: String): Unit = {
@@ -175,11 +175,11 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
     val dim = dimMem
       .toDF()
       .selectExpr(
-        "cast(split(value, ',')[0] as timestamp) as eventTime",
+        "cast(split(value, ',')[0] as timestamp) as event_time",
         "split(value, ',')[1] as city",
         "cast(split(value, ',')[1] as int) as population"
       )
-      .withWatermark("eventTime", "1 minute")
+      .withWatermark("event_time", "1 minute")
     dim.createOrReplaceTempView("dim")
 
     def addDim(t: Timestamp, city: String, population: Int): Unit = {
@@ -187,16 +187,16 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
     }
 
     val transform = spark.sql("""
-      SELECT fact.eventTime, fact.city, dim.population
+      SELECT fact.event_time, fact.city, dim.population
       FROM fact
       LEFT JOIN dim
         ON fact.city = dim.city
-          AND dim.eventTime <= fact.eventTime
+          AND dim.event_time <= fact.event_time
       LEFT JOIN dim as dim2
         ON fact.city = dim2.city
-          AND dim2.eventTime <= fact.eventTime
-          AND dim2.eventTime > dim.eventTime
-      WHERE dim2.eventTime IS NULL
+          AND dim2.event_time <= fact.event_time
+          AND dim2.event_time > dim.event_time
+      WHERE dim2.event_time IS NULL
     """)
 
     val query = transform.writeStream
@@ -233,7 +233,7 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(3), "A", Some(4))
         )
       )
-      .toDF("eventTime", "city", "population")
+      .toDF("event_time", "city", "population")
 
     assertDataFrameEquals(expected, result)
   }

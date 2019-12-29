@@ -17,7 +17,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.scalatest.FunSuite
 
 case class Population(
-  systemTime: Timestamp,
+  system_time: Timestamp,
   year: Int,
   city: String,
   population: Int
@@ -34,7 +34,7 @@ object Population {
 }
 
 case class Budget(
-  systemTime: Timestamp,
+  system_time: Timestamp,
   year: Int,
   city: String,
   budget: Int
@@ -72,7 +72,7 @@ class TemporalJoinTest
 
     val transform = spark.sql("""
       SELECT
-        current_timestamp() as systemTime,
+        current_timestamp() as system_time,
         p.year,
         p.city,
         p.population,
@@ -146,8 +146,8 @@ class TemporalJoinTest
       .orderBy("year", "city", "population")
 
     val actual = result
-      .orderBy("systemTime")
-      .drop("systemTime")
+      .orderBy("system_time")
+      .drop("system_time")
       .orderBy("year", "city", "population")
       .as[Combined]
 

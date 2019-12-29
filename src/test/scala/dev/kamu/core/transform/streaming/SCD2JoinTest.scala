@@ -22,10 +22,10 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
   def toSCD2(df: DataFrame): DataFrame = {
     df.selectExpr(
         "*",
-        "eventTime as effectiveFrom",
-        "LEAD(eventTime, 1, NULL) OVER (PARTITION BY city ORDER BY eventTime) as effectiveTo"
+        "event_time as effectiveFrom",
+        "LEAD(event_time, 1, NULL) OVER (PARTITION BY city ORDER BY event_time) as effectiveTo"
       )
-      .drop("eventTime")
+      .drop("event_time")
   }
 
   test("toSCD2") {
@@ -39,7 +39,7 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(4), "A", 5)
         )
       )
-      .toDF("eventTime", "city", "population")
+      .toDF("event_time", "city", "population")
 
     val dimSCD2 = toSCD2(dim)
       .orderBy("effectiveFrom", "city")
@@ -68,7 +68,7 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(3), "A")
         )
       )
-      .toDF("eventTime", "city")
+      .toDF("event_time", "city")
     fact.createOrReplaceTempView("fact")
 
     val dim = toSCD2(
@@ -81,7 +81,7 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
             (ts(4), "A", 5)
           )
         )
-        .toDF("eventTime", "city", "population")
+        .toDF("event_time", "city", "population")
     )
     dim.createOrReplaceTempView("dim")
 
@@ -91,10 +91,10 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
       FROM fact
       LEFT JOIN dim
         ON fact.city = dim.city
-          AND fact.eventTime >= dim.effectiveFrom
-          AND (dim.effectiveTo IS NULL OR fact.eventTime < dim.effectiveTo)
+          AND fact.event_time >= dim.effectiveFrom
+          AND (dim.effectiveTo IS NULL OR fact.event_time < dim.effectiveTo)
     """)
-      .orderBy("eventTime")
+      .orderBy("event_time")
 
     val expected = sc
       .parallelize(
@@ -104,7 +104,7 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(3), "A", Some(4))
         )
       )
-      .toDF("eventTime", "city", "population")
+      .toDF("event_time", "city", "population")
 
     assertDataFrameEquals(expected, result)
   }
@@ -114,7 +114,7 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
     val fact = factMem
       .toDF()
       .selectExpr(
-        "cast(split(value, ',')[0] as timestamp) as eventTime",
+        "cast(split(value, ',')[0] as timestamp) as event_time",
         "split(value, ',')[1] as city"
       )
     fact.createOrReplaceTempView("fact")
@@ -133,7 +133,7 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
             (ts(4), "A", 5)
           )
         )
-        .toDF("eventTime", "city", "population")
+        .toDF("event_time", "city", "population")
     )
     dim.createOrReplaceTempView("dim")
 
@@ -143,8 +143,8 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
       FROM fact
       LEFT JOIN dim
         ON fact.city = dim.city
-          AND fact.eventTime >= dim.effectiveFrom
-          AND (dim.effectiveTo IS NULL OR fact.eventTime < dim.effectiveTo)
+          AND fact.event_time >= dim.effectiveFrom
+          AND (dim.effectiveTo IS NULL OR fact.event_time < dim.effectiveTo)
     """
     )
 
@@ -177,7 +177,7 @@ class SCD2JoinTest extends FunSuite with KamuDataFrameSuite {
           (ts(3), "A", Some(4))
         )
       )
-      .toDF("eventTime", "city", "population")
+      .toDF("event_time", "city", "population")
 
     assertDataFrameEquals(expected, result)
   }

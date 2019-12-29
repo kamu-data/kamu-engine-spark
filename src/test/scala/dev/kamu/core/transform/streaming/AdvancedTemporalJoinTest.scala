@@ -16,7 +16,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.scalatest.FunSuite
 
 case class TickerEvent(
-  systemTime: Timestamp,
+  system_time: Timestamp,
   time: Timestamp,
   symbol: String,
   price: Int
@@ -33,7 +33,7 @@ object TickerEvent {
 }
 
 case class AssetEvent(
-  systemTime: Timestamp,
+  system_time: Timestamp,
   time: Timestamp,
   operation: String,
   symbol: String,
