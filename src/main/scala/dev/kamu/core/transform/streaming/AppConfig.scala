@@ -10,11 +10,12 @@ package dev.kamu.core.transform.streaming
 
 import java.io.InputStream
 
-import dev.kamu.core.manifests.{Dataset, Manifest, Resource}
+import dev.kamu.core.manifests.{DatasetID, Manifest, Resource}
 import org.apache.hadoop.fs.Path
 
 case class TransformTaskConfig(
-  datasetToTransform: Dataset,
+  datasetToTransform: DatasetID,
+  metadataPaths: Map[String, Path],
   inputDataPaths: Map[String, Path],
   checkpointsPath: Path,
   outputDataPath: Path
