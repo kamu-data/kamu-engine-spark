@@ -41,9 +41,12 @@ class Transform(config: AppConfig) {
       logger.info(s"Processing dataset: ${taskConfig.datasetToTransform}")
       systemClock.advance()
 
+      val outputLayout =
+        taskConfig.datasetLayouts(taskConfig.datasetToTransform.toString)
+
       val outputMetaChain = new MetadataChainFS(
         fileSystem,
-        taskConfig.metadataPaths(taskConfig.datasetToTransform.toString)
+        outputLayout.metadataDir
       )
 
       val blocks = outputMetaChain.getBlocks()
@@ -70,7 +73,9 @@ class Transform(config: AppConfig) {
         for (inputSlice <- inputSlices) {
           // TODO: use schema from metadata
           spark.read
-            .parquet(taskConfig.inputDataPaths(inputSlice.id.toString).toString)
+            .parquet(
+              taskConfig.datasetLayouts(inputSlice.id.toString).dataDir.toString
+            )
             .transform(sliceData(inputSlice.interval, vocab))
             .createTempView(s"`${inputSlice.id}`")
         }
@@ -97,7 +102,7 @@ class Transform(config: AppConfig) {
 
         result.write
           .mode(SaveMode.Append)
-          .parquet(taskConfig.outputDataPath.toString)
+          .parquet(outputLayout.dataDir.toString)
 
         val (resultHash, resultInterval) = if (!result.isEmpty) {
           (computeHash(result), Interval.point(systemClock.instant()))
@@ -134,7 +139,7 @@ class Transform(config: AppConfig) {
     source.inputs.map(input => {
       val inputMetaChain = new MetadataChainFS(
         fileSystem,
-        taskConfig.metadataPaths(input.id.toString)
+        taskConfig.datasetLayouts(input.id.toString).metadataDir
       )
 
       InputDataSlice(

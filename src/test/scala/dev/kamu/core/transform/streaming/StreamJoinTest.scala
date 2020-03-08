@@ -93,7 +93,7 @@ class StreamJoinTest extends FunSuite with KamuDataFrameSuite {
     fact.createOrReplaceTempView("fact")
 
     def addFact(t: Timestamp, city: String): Unit = {
-      factMem.addData(Seq(t.toString, city).mkString(","))
+      factMem.addData(Seq(t.toInstant.toString, city).mkString(","))
     }
 
     val dim = sc
