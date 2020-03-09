@@ -50,11 +50,6 @@ class Transform(config: AppConfig) {
       )
 
       val blocks = outputMetaChain.getBlocks()
-      val vocab = outputMetaChain
-        .getSummary()
-        .vocabulary
-        .getOrElse(DatasetVocabularyOverrides())
-        .asDatasetVocabulary()
 
       // TODO: source could've changed several times, so need to respect time
       val source = blocks.reverse
@@ -64,21 +59,23 @@ class Transform(config: AppConfig) {
 
       val spark = getSparkSubSession(sparkSession)
 
-      val inputSlices = getInputSlices(taskConfig, source, outputMetaChain)
+      val inputIntervals = getInputSlices(taskConfig, source, outputMetaChain)
 
-      if (inputSlices.forall(_.interval.isEmpty)) {
+      if (inputIntervals.values.forall(_.interval.isEmpty)) {
         logger.info(s"No new input data to process - skipping")
       } else {
+
         // Setup inputs
-        for (inputSlice <- inputSlices) {
-          // TODO: use schema from metadata
-          spark.read
-            .parquet(
-              taskConfig.datasetLayouts(inputSlice.id.toString).dataDir.toString
+        val inputSlices = inputIntervals.map({
+          case (id, slice) =>
+            val newSlice = prepareInputSlice(
+              spark,
+              id,
+              slice.interval,
+              taskConfig.datasetLayouts(id.toString)
             )
-            .transform(sliceData(inputSlice.interval, vocab))
-            .createTempView(s"`${inputSlice.id}`")
-        }
+            (id, newSlice)
+        })
 
         // Setup transform
         for (step <- source.steps) {
@@ -104,23 +101,44 @@ class Transform(config: AppConfig) {
           .mode(SaveMode.Append)
           .parquet(outputLayout.dataDir.toString)
 
-        val (resultHash, resultInterval) = if (!result.isEmpty) {
-          (computeHash(result), Interval.point(systemClock.instant()))
-        } else {
-          ("", Interval.empty[Instant])
-        }
+        val (resultHash, resultInterval, resultNumRecords) =
+          if (!result.isEmpty) {
+            (
+              computeHash(result),
+              Interval.point(systemClock.instant()),
+              result.count()
+            )
+          } else {
+            ("", Interval.empty[Instant], 0L)
+          }
 
         val nextBlock = MetadataBlock(
           prevBlockHash = blocks.last.blockHash,
           // TODO: Current time? Min of input times? Require to propagate in computations?
           systemTime = systemClock.instant(),
-          outputDataInterval = resultInterval,
-          outputDataHash = resultHash,
-          inputDataIntervals = inputSlices
+          outputSlice = Some(
+            DataSlice(
+              hash = resultHash,
+              interval = resultInterval,
+              numRecords = resultNumRecords
+            )
+          ),
+          inputSlices = inputSlices
+            .map({ case (id, slice) => (id.toString(), slice) })
         )
 
         // TODO: Atomicity?
         val newBlock = outputMetaChain.append(nextBlock)
+        outputMetaChain.updateSummary(
+          s =>
+            s.copy(
+              lastModified = systemClock.instant(),
+              numRecords = s.numRecords + resultNumRecords,
+              dataSize = fileSystem
+                .getContentSummary(outputLayout.dataDir)
+                .getSpaceConsumed
+            )
+        )
 
         logger.info(
           s"Done processing dataset: ${taskConfig.datasetToTransform} (${newBlock.blockHash})"
@@ -135,22 +153,28 @@ class Transform(config: AppConfig) {
     taskConfig: TransformTaskConfig,
     source: DerivativeSource,
     outputMetaChain: MetadataChainFS
-  ): Vector[InputDataSlice] = {
-    source.inputs.map(input => {
-      val inputMetaChain = new MetadataChainFS(
-        fileSystem,
-        taskConfig.datasetLayouts(input.id.toString).metadataDir
-      )
-
-      InputDataSlice(
-        input.id,
-        getInputSliceInterval(
-          input.id,
-          inputMetaChain,
-          outputMetaChain
+  ): Map[DatasetID, DataSlice] = {
+    source.inputs
+      .map(input => {
+        val inputMetaChain = new MetadataChainFS(
+          fileSystem,
+          taskConfig.datasetLayouts(input.id.toString).metadataDir
         )
-      )
-    })
+
+        (
+          input.id,
+          DataSlice(
+            hash = "",
+            interval = getInputSliceInterval(
+              input.id,
+              inputMetaChain,
+              outputMetaChain
+            ),
+            numRecords = -1
+          )
+        )
+      })
+      .toMap
   }
 
   def getInputSliceInterval(
@@ -164,8 +188,9 @@ class Transform(config: AppConfig) {
     val ivAvailable = inputMetaChain
       .getBlocks()
       .reverse
-      .find(_.outputDataInterval.nonEmpty)
-      .map(_.outputDataInterval)
+      .flatMap(_.outputSlice)
+      .find(_.interval.nonEmpty)
+      .map(_.interval)
       .map(i => Interval.fromBounds(Unbound(), i.upperBound))
       .getOrElse(Interval.empty)
 
@@ -174,11 +199,8 @@ class Transform(config: AppConfig) {
     val ivProcessed = outputMetaChain
       .getBlocks()
       .reverse
-      .find(
-        _.inputDataIntervals
-          .exists(slice => slice.id == inputID && slice.interval.nonEmpty)
-      )
-      .flatMap(_.inputDataIntervals.find(_.id == inputID))
+      .flatMap(_.inputSlices.get(inputID.toString))
+      .find(_.interval.nonEmpty)
       .map(_.interval)
       .getOrElse(Interval.empty)
 
@@ -198,6 +220,33 @@ class Transform(config: AppConfig) {
       s"Input range for $inputID is: $ivToProcess (available: $ivAvailable, processed: $ivProcessed)"
     )
     ivToProcess
+  }
+
+  def prepareInputSlice(
+    spark: SparkSession,
+    id: DatasetID,
+    interval: Interval[Instant],
+    layout: DatasetLayout
+  ): DataSlice = {
+    val inputMetaChain = new MetadataChainFS(fileSystem, layout.metadataDir)
+    val vocab = inputMetaChain
+      .getSummary()
+      .vocabulary
+      .getOrElse(DatasetVocabularyOverrides())
+      .asDatasetVocabulary()
+
+    // TODO: use schema from metadata
+    val df = spark.read
+      .parquet(layout.dataDir.toString)
+      .transform(sliceData(interval, vocab))
+
+    df.createTempView(s"`$id`")
+
+    DataSlice(
+      hash = computeHash(df),
+      interval = interval,
+      numRecords = df.count()
+    )
   }
 
   def sliceData(interval: Interval[Instant], vocab: DatasetVocabulary)(
