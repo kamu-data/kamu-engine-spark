@@ -132,7 +132,7 @@ class Transform(config: AppConfig) {
         outputMetaChain.updateSummary(
           s =>
             s.copy(
-              lastModified = systemClock.instant(),
+              lastPulled = Some(systemClock.instant()),
               numRecords = s.numRecords + resultNumRecords,
               dataSize = fileSystem
                 .getContentSummary(outputLayout.dataDir)
