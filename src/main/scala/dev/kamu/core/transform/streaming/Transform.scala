@@ -97,9 +97,7 @@ class Transform(config: AppConfig) {
         val result = spark
           .sql(s"SELECT * FROM `${taskConfig.datasetToTransform}`")
 
-        result.write
-          .mode(SaveMode.Append)
-          .parquet(outputLayout.dataDir.toString)
+        result.cache()
 
         val (resultHash, resultInterval, resultNumRecords) =
           if (!result.isEmpty) {
@@ -111,6 +109,12 @@ class Transform(config: AppConfig) {
           } else {
             ("", Interval.empty[Instant], 0L)
           }
+
+        result.write
+          .mode(SaveMode.Append)
+          .parquet(outputLayout.dataDir.toString)
+
+        result.unpersist()
 
         val nextBlock = MetadataBlock(
           prevBlockHash = blocks.last.blockHash,
