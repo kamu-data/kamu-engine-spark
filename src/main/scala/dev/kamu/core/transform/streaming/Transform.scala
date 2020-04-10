@@ -11,7 +11,10 @@ package dev.kamu.core.transform.streaming
 import java.sql.Timestamp
 import java.time.Instant
 
+import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
+import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
+import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.infra.MetadataChainFS
 import dev.kamu.core.utils.{DataFrameDigestSHA1, ManualClock}
 import org.apache.hadoop.fs.FileSystem
@@ -78,19 +81,21 @@ class Transform(config: AppConfig) {
         })
 
         // Setup transform
-        for (step <- source.steps) {
-          step match {
-            case s: ProcessingStepKind.SparkSQL =>
-              spark
-                .sql(s.query)
-                .createTempView(
-                  s"`${s.alias.getOrElse(taskConfig.datasetToTransform)}`"
-                )
-            case _ =>
-              throw new RuntimeException(
-                s"Unsupported processing step kind: $step"
-              )
-          }
+        if (source.transformEngine != "sparkSQL")
+          throw new RuntimeException(
+            s"Unsupported engine: ${source.transformEngine}"
+          )
+
+        val transformDef =
+          yaml.load[TransformKind.SparkSQL](source.transform.toConfig)
+
+        for (step <- transformDef.queries) {
+          spark
+            .sql(step.query)
+            .createTempView(
+              s"`${step.alias.getOrElse(taskConfig.datasetToTransform)}`"
+            )
+
         }
 
         // Write output

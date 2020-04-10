@@ -15,11 +15,11 @@ import dev.kamu.core.manifests.{DatasetID, DatasetLayout, Manifest, Resource}
 case class TransformTaskConfig(
   datasetToTransform: DatasetID,
   datasetLayouts: Map[String, DatasetLayout]
-) extends Resource[TransformTaskConfig]
+) extends Resource
 
 case class AppConfig(
   tasks: Vector[TransformTaskConfig]
-) extends Resource[AppConfig]
+) extends Resource
 
 object AppConfig {
   import dev.kamu.core.manifests.parsing.pureconfig.yaml
