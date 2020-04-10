@@ -13,7 +13,6 @@ import java.sql.Timestamp
 import dev.kamu.core.utils.test.KamuDataFrameSuite
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
-import org.apache.spark.streaming.TestStreamingContext
 import org.scalatest.FunSuite
 
 case class OldBoat(
@@ -72,10 +71,12 @@ case class Make(
   frequency: Long
 )
 
+//////////////
+
 class AdvancedTemporalJoinTest2 extends FunSuite with KamuDataFrameSuite {
   import spark.implicits._
 
-  def t(day: Int) = ts(2000, 1, day)
+  def t(minute: Int) = ts(2000, 1, 1, 0, minute)
 
   ignore("advancedTemporalJoin2") {
     val oldStream = MemoryStream[OldBoat](1, spark.sqlContext)
