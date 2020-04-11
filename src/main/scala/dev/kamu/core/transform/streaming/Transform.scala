@@ -106,7 +106,7 @@ class Transform(config: AppConfig) {
     datasetID: DatasetID,
     inputIntervals: Map[DatasetID, Interval[Instant]],
     datasetLayouts: Map[DatasetID, DatasetLayout],
-    source: DerivativeSource,
+    source: SourceKind.Derivative,
     transform: TransformKind.SparkSQL
   ): MetadataBlock = {
     val spark = getSparkSubSession(sparkSession)
@@ -164,17 +164,17 @@ class Transform(config: AppConfig) {
 
   def getSourceAndTransform(
     outputMetaChain: MetadataChainFS
-  ): (DerivativeSource, TransformKind.SparkSQL) = {
+  ): (SourceKind.Derivative, TransformKind.SparkSQL) = {
     val sources = outputMetaChain
       .getBlocks()
       .reverse
-      .flatMap(_.derivativeSource)
+      .flatMap(_.source)
 
     // TODO: source could've changed several times
     if (sources.length > 1)
       throw new RuntimeException("Transform evolution is not yet supported")
 
-    val source = sources.head
+    val source = sources.head.asInstanceOf[SourceKind.Derivative]
 
     if (source.transformEngine != "sparkSQL")
       throw new RuntimeException(
@@ -188,7 +188,7 @@ class Transform(config: AppConfig) {
 
   def getInputIntervals(
     taskConfig: TransformTaskConfig,
-    source: DerivativeSource,
+    source: SourceKind.Derivative,
     outputMetaChain: MetadataChainFS
   ): Map[DatasetID, Interval[Instant]] = {
     source.inputs.zipWithIndex.map {
