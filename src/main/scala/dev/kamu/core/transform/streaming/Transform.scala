@@ -29,6 +29,11 @@ import org.datasyslab.geosparksql.utils.GeoSparkSQLRegistrator
 import spire.math.interval.{Closed, Open, Unbound, ValueBound}
 import spire.math.{Empty, Interval}
 
+case class InputSlice(
+  dataFrame: DataFrame,
+  dataSlice: DataSlice
+)
+
 class Transform(config: AppConfig) {
   val logger = LogManager.getLogger(getClass.getName)
   val systemClock = new ManualClock()
@@ -54,95 +59,34 @@ class Transform(config: AppConfig) {
 
       val blocks = outputMetaChain.getBlocks()
 
-      // TODO: source could've changed several times, so need to respect time
-      val source = blocks.reverse
-        .find(_.derivativeSource.isDefined)
-        .flatMap(_.derivativeSource)
-        .get
+      val (source, transform) = getSourceAndTransform(outputMetaChain)
 
-      val spark = getSparkSubSession(sparkSession)
+      val inputIntervals =
+        getInputIntervals(taskConfig, source, outputMetaChain)
 
-      val inputIntervals = getInputSlices(taskConfig, source, outputMetaChain)
-
-      if (inputIntervals.values.forall(_.interval.isEmpty)) {
+      if (inputIntervals.values.forall(_.isEmpty)) {
         logger.info(s"No new input data to process - skipping")
       } else {
-
-        // Setup inputs
-        val inputSlices = inputIntervals.map({
-          case (id, slice) =>
-            val newSlice = prepareInputSlice(
-              spark,
-              id,
-              slice.interval,
-              taskConfig.datasetLayouts(id.toString)
-            )
-            (id, newSlice)
-        })
-
-        // Setup transform
-        if (source.transformEngine != "sparkSQL")
-          throw new RuntimeException(
-            s"Unsupported engine: ${source.transformEngine}"
-          )
-
-        val transformDef =
-          yaml.load[TransformKind.SparkSQL](source.transform.toConfig)
-
-        for (step <- transformDef.queries) {
-          spark
-            .sql(step.query)
-            .createTempView(
-              s"`${step.alias.getOrElse(taskConfig.datasetToTransform)}`"
-            )
-
-        }
-
-        // Write output
-        val result = spark
-          .sql(s"SELECT * FROM `${taskConfig.datasetToTransform}`")
-
-        result.cache()
-
-        val (resultHash, resultInterval, resultNumRecords) =
-          if (!result.isEmpty) {
-            (
-              computeHash(result),
-              Interval.point(systemClock.instant()),
-              result.count()
-            )
-          } else {
-            ("", Interval.empty[Instant], 0L)
-          }
-
-        result.write
-          .mode(SaveMode.Append)
-          .parquet(outputLayout.dataDir.toString)
-
-        result.unpersist()
-
-        val nextBlock = MetadataBlock(
-          prevBlockHash = blocks.last.blockHash,
-          // TODO: Current time? Min of input times? Require to propagate in computations?
-          systemTime = systemClock.instant(),
-          outputSlice = Some(
-            DataSlice(
-              hash = resultHash,
-              interval = resultInterval,
-              numRecords = resultNumRecords
-            )
-          ),
-          inputSlices = inputSlices
-            .map({ case (id, slice) => (id.toString(), slice) })
+        val nextBlock = transformBatch(
+          taskConfig.datasetToTransform,
+          inputIntervals,
+          taskConfig.datasetLayouts.map {
+            case (id, layout) => (DatasetID(id), layout)
+          },
+          source,
+          transform
         )
 
         // TODO: Atomicity?
-        val newBlock = outputMetaChain.append(nextBlock)
+        val newBlock = outputMetaChain.append(
+          nextBlock.copy(prevBlockHash = blocks.last.blockHash)
+        )
+
         outputMetaChain.updateSummary(
           s =>
             s.copy(
               lastPulled = Some(systemClock.instant()),
-              numRecords = s.numRecords + resultNumRecords,
+              numRecords = s.numRecords + newBlock.outputSlice.get.numRecords,
               dataSize = fileSystem
                 .getContentSummary(outputLayout.dataDir)
                 .getSpaceConsumed
@@ -158,13 +102,97 @@ class Transform(config: AppConfig) {
     logger.info("Finished")
   }
 
-  def getInputSlices(
+  def transformBatch(
+    datasetID: DatasetID,
+    inputIntervals: Map[DatasetID, Interval[Instant]],
+    datasetLayouts: Map[DatasetID, DatasetLayout],
+    source: DerivativeSource,
+    transform: TransformKind.SparkSQL
+  ): MetadataBlock = {
+    val spark = getSparkSubSession(sparkSession)
+
+    // Setup inputs
+    val inputs = prepareInputSlices(spark, inputIntervals, datasetLayouts)
+
+    // Setup transform
+    for (step <- transform.queries) {
+      spark
+        .sql(step.query)
+        .createTempView(s"`${step.alias.getOrElse(datasetID)}`")
+    }
+
+    // Process data
+    val result = spark
+      .sql(s"SELECT * FROM `$datasetID`")
+
+    result.cache()
+
+    // Compute metadata
+    val (resultHash, resultInterval, resultNumRecords) =
+      if (!result.isEmpty) {
+        (
+          computeHash(result),
+          Interval.point(systemClock.instant()),
+          result.count()
+        )
+      } else {
+        ("", Interval.empty[Instant], 0L)
+      }
+
+    // Write data
+    result.write
+      .mode(SaveMode.Append)
+      .parquet(datasetLayouts(datasetID).dataDir.toString)
+
+    result.unpersist(true)
+    inputs.values.foreach(_.dataFrame.unpersist(true))
+
+    MetadataBlock(
+      prevBlockHash = "",
+      // TODO: Current time? Min of input times? Require to propagate in computations?
+      systemTime = systemClock.instant(),
+      outputSlice = Some(
+        DataSlice(
+          hash = resultHash,
+          interval = resultInterval,
+          numRecords = resultNumRecords
+        )
+      ),
+      inputSlices = source.inputs.map(i => inputs(i.id).dataSlice)
+    )
+  }
+
+  def getSourceAndTransform(
+    outputMetaChain: MetadataChainFS
+  ): (DerivativeSource, TransformKind.SparkSQL) = {
+    val sources = outputMetaChain
+      .getBlocks()
+      .reverse
+      .flatMap(_.derivativeSource)
+
+    // TODO: source could've changed several times
+    if (sources.length > 1)
+      throw new RuntimeException("Transform evolution is not yet supported")
+
+    val source = sources.head
+
+    if (source.transformEngine != "sparkSQL")
+      throw new RuntimeException(
+        s"Unsupported engine: ${source.transformEngine}"
+      )
+
+    val transform = yaml.load[TransformKind.SparkSQL](source.transform.toConfig)
+
+    (source, transform)
+  }
+
+  def getInputIntervals(
     taskConfig: TransformTaskConfig,
     source: DerivativeSource,
     outputMetaChain: MetadataChainFS
-  ): Map[DatasetID, DataSlice] = {
-    source.inputs
-      .map(input => {
+  ): Map[DatasetID, Interval[Instant]] = {
+    source.inputs.zipWithIndex.map {
+      case (input, index) =>
         val inputMetaChain = new MetadataChainFS(
           fileSystem,
           taskConfig.datasetLayouts(input.id.toString).metadataDir
@@ -172,22 +200,19 @@ class Transform(config: AppConfig) {
 
         (
           input.id,
-          DataSlice(
-            hash = "",
-            interval = getInputSliceInterval(
-              input.id,
-              inputMetaChain,
-              outputMetaChain
-            ),
-            numRecords = -1
+          getInputSliceInterval(
+            input.id,
+            index,
+            inputMetaChain,
+            outputMetaChain
           )
         )
-      })
-      .toMap
+    }.toMap
   }
 
   def getInputSliceInterval(
     inputID: DatasetID,
+    inputIndex: Int,
     inputMetaChain: MetadataChainFS,
     outputMetaChain: MetadataChainFS
   ): Interval[Instant] = {
@@ -208,7 +233,8 @@ class Transform(config: AppConfig) {
     val ivProcessed = outputMetaChain
       .getBlocks()
       .reverse
-      .flatMap(_.inputSlices.get(inputID.toString))
+      .filter(_.inputSlices.nonEmpty)
+      .map(_.inputSlices(inputIndex))
       .find(_.interval.nonEmpty)
       .map(_.interval)
       .getOrElse(Interval.empty)
@@ -231,12 +257,29 @@ class Transform(config: AppConfig) {
     ivToProcess
   }
 
+  def prepareInputSlices(
+    spark: SparkSession,
+    inputIntervals: Map[DatasetID, Interval[Instant]],
+    inputLayouts: Map[DatasetID, DatasetLayout]
+  ): Map[DatasetID, InputSlice] = {
+    inputIntervals.map({
+      case (id, interval) =>
+        val inputSlice = prepareInputSlice(
+          spark,
+          id,
+          interval,
+          inputLayouts(id)
+        )
+        (id, inputSlice)
+    })
+  }
+
   def prepareInputSlice(
     spark: SparkSession,
     id: DatasetID,
     interval: Interval[Instant],
     layout: DatasetLayout
-  ): DataSlice = {
+  ): InputSlice = {
     val inputMetaChain = new MetadataChainFS(fileSystem, layout.metadataDir)
     val vocab = inputMetaChain
       .getSummary()
@@ -249,12 +292,16 @@ class Transform(config: AppConfig) {
       .parquet(layout.dataDir.toString)
       .transform(sliceData(interval, vocab))
 
+    df.cache()
     df.createTempView(s"`$id`")
 
-    DataSlice(
-      hash = computeHash(df),
-      interval = interval,
-      numRecords = df.count()
+    InputSlice(
+      dataFrame = df,
+      dataSlice = DataSlice(
+        hash = computeHash(df),
+        interval = interval,
+        numRecords = df.count()
+      )
     )
   }
 
