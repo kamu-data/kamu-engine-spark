@@ -8,7 +8,15 @@
 
 package dev.kamu.core.transform.streaming
 
+import dev.kamu.core.utils.ManualClock
+import org.apache.hadoop.fs.FileSystem
 import org.apache.log4j.LogManager
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.sql.SparkSession
+import org.datasyslab.geospark.serde.GeoSparkKryoRegistrator
+import org.datasyslab.geosparksql.utils.GeoSparkSQLRegistrator
 
 object TransformApp {
   def main(args: Array[String]) {
@@ -16,9 +24,58 @@ object TransformApp {
     val config = AppConfig.load()
     if (config.tasks.isEmpty) {
       logger.warn("No tasks specified")
-    } else {
-      val transform = new Transform(config)
-      transform.transform()
+      return
     }
+
+    logger.info("Starting transform.streaming")
+    logger.info(s"Running with config: $config")
+
+    val fileSystem = FileSystem.get(hadoopConf)
+    val systemClock = new ManualClock()
+    val spark = getSparkSubSession(sparkSession)
+
+    val batcher = new Batcher(fileSystem, spark, systemClock)
+    val engine = new Transform(fileSystem, spark, systemClock)
+
+    for (taskConfig <- config.tasks) {
+      logger.info(s"Processing dataset: ${taskConfig.datasetToTransform}")
+
+      batcher.foreachBatch(taskConfig) { (inputSlices, transform) =>
+        logger.info(
+          s"Processing dataset batch: ${taskConfig.datasetToTransform} [${}]"
+        )
+        ///////////////////////// TODO
+        systemClock.advance()
+        engine.execute(taskConfig.datasetToTransform, inputSlices, transform)
+      }
+
+      logger.info(s"Done processing dataset: ${taskConfig.datasetToTransform}")
+    }
+
+    logger.info("Finished")
+  }
+
+  def sparkConf: SparkConf = {
+    new SparkConf()
+      .setAppName("transform.streaming")
+      .set("spark.sql.session.timeZone", "UTC")
+      .set("spark.serializer", classOf[KryoSerializer].getName)
+      .set("spark.kryo.registrator", classOf[GeoSparkKryoRegistrator].getName)
+  }
+
+  def hadoopConf: org.apache.hadoop.conf.Configuration = {
+    SparkHadoopUtil.get.newConfiguration(sparkConf)
+  }
+
+  def sparkSession: SparkSession = {
+    SparkSession.builder
+      .config(sparkConf)
+      .getOrCreate()
+  }
+
+  def getSparkSubSession(sparkSession: SparkSession): SparkSession = {
+    val subSession = sparkSession.newSession()
+    GeoSparkSQLRegistrator.registerAll(subSession)
+    subSession
   }
 }
