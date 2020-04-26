@@ -10,11 +10,15 @@ package dev.kamu.core.transform.streaming
 
 import java.io.InputStream
 
-import dev.kamu.core.manifests.{DatasetID, DatasetLayout, Manifest, Resource}
+import dev.kamu.core.manifests._
+import org.apache.hadoop.fs.Path
 
 case class TransformTaskConfig(
-  datasetToTransform: DatasetID,
-  datasetLayouts: Map[String, DatasetLayout]
+  datasetID: DatasetID,
+  source: SourceKind.Derivative,
+  inputSlices: Map[String, DataSlice],
+  datasetLayouts: Map[String, DatasetLayout],
+  metadataOutputDir: Path
 ) extends Resource
 
 case class AppConfig(

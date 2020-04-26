@@ -19,7 +19,7 @@ class Transform(
   spark: SparkSession,
   systemClock: Clock
 ) {
-  val logger = LogManager.getLogger(getClass.getName)
+  private val logger = LogManager.getLogger(getClass.getName)
 
   def execute(
     datasetID: DatasetID,

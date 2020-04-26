@@ -34,22 +34,15 @@ object TransformApp {
     val systemClock = new ManualClock()
     val spark = getSparkSubSession(sparkSession)
 
-    val batcher = new Batcher(fileSystem, spark, systemClock)
-    val engine = new Transform(fileSystem, spark, systemClock)
+    val transform = new TransformExtended(fileSystem, spark, systemClock)
 
     for (taskConfig <- config.tasks) {
-      logger.info(s"Processing dataset: ${taskConfig.datasetToTransform}")
+      systemClock.advance()
+      logger.info(s"Processing dataset: ${taskConfig.datasetID}")
 
-      batcher.foreachBatch(taskConfig) { (inputSlices, transform) =>
-        logger.info(
-          s"Processing dataset batch: ${taskConfig.datasetToTransform} [${}]"
-        )
-        ///////////////////////// TODO
-        systemClock.advance()
-        engine.execute(taskConfig.datasetToTransform, inputSlices, transform)
-      }
+      transform.executeExtended(taskConfig)
 
-      logger.info(s"Done processing dataset: ${taskConfig.datasetToTransform}")
+      logger.info(s"Done processing dataset: ${taskConfig.datasetID}")
     }
 
     logger.info("Finished")
