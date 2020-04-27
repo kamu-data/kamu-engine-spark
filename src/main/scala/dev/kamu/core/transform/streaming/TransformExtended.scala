@@ -92,10 +92,10 @@ class TransformExtended(
       inputSlices = task.source.inputs.map(i => inputSlices(i.id).dataSlice)
     )
 
-    val ouptutStream =
+    val outputStream =
       fileSystem.create(task.metadataOutputDir.resolve("block.yaml"))
-    yaml.save(Manifest(block), ouptutStream)
-    ouptutStream.close()
+    yaml.save(Manifest(block), outputStream)
+    outputStream.close()
   }
 
   private def prepareInputSlices(

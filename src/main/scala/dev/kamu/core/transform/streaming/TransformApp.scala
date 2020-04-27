@@ -32,13 +32,16 @@ object TransformApp {
 
     val fileSystem = FileSystem.get(hadoopConf)
     val systemClock = new ManualClock()
-    val spark = getSparkSubSession(sparkSession)
-
-    val transform = new TransformExtended(fileSystem, spark, systemClock)
 
     for (taskConfig <- config.tasks) {
       systemClock.advance()
       logger.info(s"Processing dataset: ${taskConfig.datasetID}")
+
+      val transform = new TransformExtended(
+        fileSystem,
+        getSparkSubSession(sparkSession),
+        systemClock
+      )
 
       transform.executeExtended(taskConfig)
 
