@@ -16,7 +16,7 @@ import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import dev.kamu.core.manifests.infra.MetadataChainFS
-import dev.kamu.core.utils.{Clock, DataFrameDigestSHA1}
+import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256}
 import dev.kamu.core.utils.fs._
 import org.apache.hadoop.fs.FileSystem
 import org.apache.log4j.LogManager
@@ -179,7 +179,7 @@ class TransformExtended(
 
   private def computeHash(df: DataFrame): String = {
     // TODO: drop system time column first?
-    new DataFrameDigestSHA1().digest(df)
+    new DataFrameDigestSHA256().digest(df)
   }
 
   private def typedMap[T](m: Map[String, T]): Map[DatasetID, T] = {
