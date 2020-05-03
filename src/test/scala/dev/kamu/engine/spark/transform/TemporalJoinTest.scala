@@ -6,7 +6,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.core.transform.streaming
+package dev.kamu.engine.spark.transform
 
 import java.sql.Timestamp
 

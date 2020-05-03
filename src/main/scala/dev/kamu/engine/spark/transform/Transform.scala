@@ -6,18 +6,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.core.transform.streaming
+package dev.kamu.engine.spark.transform
 
 import dev.kamu.core.manifests._
-import dev.kamu.core.utils.Clock
-import org.apache.hadoop.fs.FileSystem
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 class Transform(
-  fileSystem: FileSystem,
-  spark: SparkSession,
-  systemClock: Clock
+  spark: SparkSession
 ) {
   private val logger = LogManager.getLogger(getClass.getName)
 

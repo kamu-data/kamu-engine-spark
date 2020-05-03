@@ -6,7 +6,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.core.transform.streaming
+package dev.kamu.engine.spark.transform
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -35,7 +35,7 @@ class TransformExtended(
   fileSystem: FileSystem,
   spark: SparkSession,
   systemClock: Clock
-) extends Transform(fileSystem, spark, systemClock) {
+) extends Transform(spark) {
   private val logger = LogManager.getLogger(getClass.getName)
 
   def executeExtended(task: TransformTaskConfig): Unit = {
