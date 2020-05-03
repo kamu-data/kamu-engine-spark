@@ -13,6 +13,7 @@ import java.time.Instant
 import java.util.zip.ZipInputStream
 
 import dev.kamu.core.manifests._
+import dev.kamu.core.manifests.infra.IngestTask
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import pureconfig.generic.auto._

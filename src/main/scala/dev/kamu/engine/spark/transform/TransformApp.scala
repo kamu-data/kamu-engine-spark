@@ -8,6 +8,7 @@
 
 package dev.kamu.engine.spark.transform
 
+import dev.kamu.core.manifests.infra.TransformConfig
 import dev.kamu.core.utils.ManualClock
 import org.apache.hadoop.fs.FileSystem
 import org.apache.log4j.LogManager
@@ -21,7 +22,7 @@ import org.datasyslab.geosparksql.utils.GeoSparkSQLRegistrator
 object TransformApp {
   def main(args: Array[String]) {
     val logger = LogManager.getLogger(getClass.getName)
-    val config = AppConfig.load()
+    val config = TransformConfig.load()
     if (config.tasks.isEmpty) {
       logger.warn("No tasks specified")
       return

@@ -8,6 +8,7 @@
 
 package dev.kamu.engine.spark.ingest
 
+import dev.kamu.core.manifests.infra.IngestConfig
 import dev.kamu.core.utils.ManualClock
 import org.apache.hadoop.fs.FileSystem
 import org.apache.log4j.LogManager
@@ -21,7 +22,7 @@ import org.datasyslab.geosparksql.utils.GeoSparkSQLRegistrator
 object IngestApp {
   def main(args: Array[String]) {
     val logger = LogManager.getLogger(getClass.getName)
-    val config = AppConf.load()
+    val config = IngestConfig.load()
     val systemClock = new ManualClock()
     val fileSystem = FileSystem.get(hadoopConf)
 

@@ -15,7 +15,7 @@ import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests.infra.MetadataChainFS
+import dev.kamu.core.manifests.infra.{MetadataChainFS, TransformTaskConfig}
 import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256}
 import dev.kamu.core.utils.fs._
 import org.apache.hadoop.fs.FileSystem
