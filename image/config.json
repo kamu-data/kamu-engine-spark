@@ -1,6 +1,0 @@
-{
-  "checkpointDir": "/opt/checkpoint",
-  "dataDerivativeDir": "/opt/derivative",
-  "dataRootDir": "/opt/root",
-  "transforms": []
-}
