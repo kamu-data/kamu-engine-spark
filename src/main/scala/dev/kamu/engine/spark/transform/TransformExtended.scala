@@ -15,7 +15,7 @@ import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests.infra.{MetadataChainFS, TransformTaskConfig}
+import dev.kamu.core.manifests.infra.TransformTaskConfig
 import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256}
 import dev.kamu.core.utils.fs._
 import org.apache.hadoop.fs.FileSystem
@@ -25,10 +25,7 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import spire.math.{Empty, Interval}
 import spire.math.interval.{Closed, Open, Unbound}
 
-case class InputSlice(
-  dataFrame: DataFrame,
-  dataSlice: DataSlice
-)
+case class InputSlice(dataFrame: DataFrame, dataSlice: DataSlice)
 
 /** Houses logic that eventually should be moved to the coordinator side **/
 class TransformExtended(
@@ -51,6 +48,7 @@ class TransformExtended(
       prepareInputSlices(
         spark,
         typedMap(task.inputSlices),
+        typedMap(task.datasetVocabs),
         typedMap(task.datasetLayouts)
       )
 
@@ -101,16 +99,13 @@ class TransformExtended(
   private def prepareInputSlices(
     spark: SparkSession,
     inputSlices: Map[DatasetID, DataSlice],
+    inputVocabs: Map[DatasetID, DatasetVocabulary],
     inputLayouts: Map[DatasetID, DatasetLayout]
   ): Map[DatasetID, InputSlice] = {
     inputSlices.map({
       case (id, slice) =>
-        val inputSlice = prepareInputSlice(
-          spark,
-          id,
-          slice,
-          inputLayouts(id)
-        )
+        val inputSlice =
+          prepareInputSlice(spark, id, slice, inputVocabs(id), inputLayouts(id))
         (id, inputSlice)
     })
   }
@@ -119,15 +114,9 @@ class TransformExtended(
     spark: SparkSession,
     id: DatasetID,
     slice: DataSlice,
+    vocab: DatasetVocabulary,
     layout: DatasetLayout
   ): InputSlice = {
-    val inputMetaChain = new MetadataChainFS(fileSystem, layout.metadataDir)
-    val vocab = inputMetaChain
-      .getSummary()
-      .vocabulary
-      .getOrElse(DatasetVocabularyOverrides())
-      .asDatasetVocabulary()
-
     // TODO: use schema from metadata
     val df = spark.read
       .parquet(layout.dataDir.toString)
@@ -137,10 +126,7 @@ class TransformExtended(
 
     InputSlice(
       dataFrame = df,
-      dataSlice = slice.copy(
-        hash = computeHash(df),
-        numRecords = df.count()
-      )
+      dataSlice = slice.copy(hash = computeHash(df), numRecords = df.count())
     )
   }
 
