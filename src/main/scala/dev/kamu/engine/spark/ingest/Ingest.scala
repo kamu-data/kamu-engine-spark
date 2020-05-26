@@ -81,16 +81,18 @@ class Ingest(
       .transform(normalizeSchema(source))
       .transform(preprocess(source))
       .transform(mergeWithExisting(source, eventTime, outPath, vocab))
-      .maybeTransform(source.coalesce != 0, _.coalesce(source.coalesce))
+      .coalesce(1)
+      .maybeTransform(
+        vocab.eventTimeColumn.isDefined,
+        _.sort(vocab.eventTimeColumn.get)
+      )
 
     result.cache()
 
     val hash = computeHash(result)
     val numRecords = result.count()
 
-    result.write
-      .mode(SaveMode.Append)
-      .parquet(outPath.toString)
+    writeParquet(result, outPath)
 
     result.unpersist()
 
@@ -276,6 +278,36 @@ class Ingest(
 
     // TODO: Cache prev and curr?
     mergeStrategy.merge(prev, curr)
+  }
+
+  private def writeParquet(df: DataFrame, outDir: Path): Path = {
+    val tmpOutDir = outDir.resolve(".tmp")
+
+    df.write.parquet(tmpOutDir.toString)
+
+    val dataFiles = fileSystem
+      .listStatus(tmpOutDir)
+      .filter(_.getPath.getName.endsWith(".snappy.parquet"))
+
+    if (dataFiles.length != 1)
+      throw new RuntimeException(
+        "Unexpected number of files in output directory:\n" + fileSystem
+          .listStatus(tmpOutDir)
+          .map(_.getPath)
+          .mkString("\n")
+      )
+
+    val dataFile = dataFiles.head.getPath
+
+    val targetFile = outDir.resolve(
+      systemClock.instant().toString.replaceAll("[:.]", "") + ".snappy.parquet"
+    )
+
+    fileSystem.rename(dataFile, targetFile)
+
+    fileSystem.delete(tmpOutDir, true)
+
+    targetFile
   }
 
   private def computeHash(df: DataFrame): String = {

@@ -1,1 +1,1 @@
-# kamu-core-transform-streaming
+# Apache Spark-based Engine for Open Data Fabric
