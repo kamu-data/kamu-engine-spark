@@ -15,7 +15,7 @@ import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests.infra.TransformTaskConfig
+import dev.kamu.core.manifests.infra.{ExecuteQueryRequest, ExecuteQueryResult}
 import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256}
 import dev.kamu.core.utils.fs._
 import org.apache.hadoop.fs.FileSystem
@@ -35,24 +35,24 @@ class TransformExtended(
 ) extends Transform(spark) {
   private val logger = LogManager.getLogger(getClass.getName)
 
-  def executeExtended(task: TransformTaskConfig): Unit = {
-    if (task.source.transformEngine != "sparkSQL")
+  def executeExtended(request: ExecuteQueryRequest): ExecuteQueryResult = {
+    if (request.source.transformEngine != "sparkSQL")
       throw new RuntimeException(
-        s"Unsupported engine: ${task.source.transformEngine}"
+        s"Unsupported engine: ${request.source.transformEngine}"
       )
 
     val transform =
-      yaml.load[TransformKind.SparkSQL](task.source.transform.toConfig)
+      yaml.load[TransformKind.SparkSQL](request.source.transform.toConfig)
 
     val inputSlices =
       prepareInputSlices(
         spark,
-        typedMap(task.inputSlices),
-        typedMap(task.datasetVocabs),
-        typedMap(task.datasetLayouts)
+        typedMap(request.inputSlices),
+        typedMap(request.datasetVocabs),
+        typedMap(request.datasetLayouts)
       )
 
-    val result = execute(task.datasetID, inputSlices, transform)
+    val result = execute(request.datasetID, inputSlices, transform)
     result.cache()
 
     // Compute metadata
@@ -70,7 +70,9 @@ class TransformExtended(
     // Write data
     result.write
       .mode(SaveMode.Append)
-      .parquet(task.datasetLayouts(task.datasetID.toString).dataDir.toString)
+      .parquet(
+        request.datasetLayouts(request.datasetID.toString).dataDir.toString
+      )
 
     // Release memory
     result.unpersist(true)
@@ -87,13 +89,10 @@ class TransformExtended(
           numRecords = resultNumRecords
         )
       ),
-      inputSlices = task.source.inputs.map(i => inputSlices(i.id).dataSlice)
+      inputSlices = request.source.inputs.map(i => inputSlices(i.id).dataSlice)
     )
 
-    val outputStream =
-      fileSystem.create(task.metadataOutputDir.resolve("block.yaml"))
-    yaml.save(Manifest(block), outputStream)
-    outputStream.close()
+    ExecuteQueryResult(block = block, dataFileName = None)
   }
 
   private def prepareInputSlices(

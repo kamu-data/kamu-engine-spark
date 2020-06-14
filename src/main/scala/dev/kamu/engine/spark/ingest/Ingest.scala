@@ -13,7 +13,7 @@ import java.time.Instant
 import java.util.zip.ZipInputStream
 
 import dev.kamu.core.manifests._
-import dev.kamu.core.manifests.infra.IngestTask
+import dev.kamu.core.manifests.infra.{IngestRequest, IngestResult}
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import pureconfig.generic.auto._
@@ -36,20 +36,17 @@ class Ingest(
 ) {
   private val logger = LogManager.getLogger(getClass.getName)
 
-  def ingest(spark: SparkSession, task: IngestTask): Unit = {
+  def ingest(spark: SparkSession, request: IngestRequest): IngestResult = {
     val block = ingest(
       spark,
-      task.source,
-      task.eventTime,
-      task.dataToIngest,
-      task.datasetLayout.dataDir,
-      task.datasetVocab
+      request.source,
+      request.eventTime,
+      request.dataToIngest,
+      request.datasetLayout.dataDir,
+      request.datasetVocab
     )
 
-    val ouptutStream =
-      fileSystem.create(task.metadataOutputDir.resolve("block.yaml"))
-    yaml.save(Manifest(block), ouptutStream)
-    ouptutStream.close()
+    IngestResult(block = block)
   }
 
   private def ingest(

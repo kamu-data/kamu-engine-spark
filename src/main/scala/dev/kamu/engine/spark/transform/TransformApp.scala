@@ -8,9 +8,13 @@
 
 package dev.kamu.engine.spark.transform
 
-import dev.kamu.core.manifests.infra.TransformConfig
+import pureconfig.generic.auto._
+import dev.kamu.core.manifests.parsing.pureconfig.yaml
+import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
+import dev.kamu.core.manifests.Manifest
+import dev.kamu.core.manifests.infra.ExecuteQueryRequest
 import dev.kamu.core.utils.ManualClock
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -20,36 +24,38 @@ import org.datasyslab.geospark.serde.GeoSparkKryoRegistrator
 import org.datasyslab.geosparksql.utils.GeoSparkSQLRegistrator
 
 object TransformApp {
+  val requestPath = new Path("/opt/engine/in-out/request.yaml")
+  val resultPath = new Path("/opt/engine/in-out/result.yaml")
+
   def main(args: Array[String]) {
     val logger = LogManager.getLogger(getClass.getName)
-    val config = TransformConfig.load()
-    if (config.tasks.isEmpty) {
-      logger.warn("No tasks specified")
-      return
-    }
-
-    logger.info("Starting transform.streaming")
-    logger.info(s"Running with config: $config")
 
     val fileSystem = FileSystem.get(hadoopConf)
+
+    if (!fileSystem.exists(requestPath))
+      throw new RuntimeException(s"Could not find request config: $requestPath")
+
+    val request =
+      yaml.load[Manifest[ExecuteQueryRequest]](fileSystem, requestPath).content
+
+    logger.info("Starting transform.streaming")
+    logger.info(s"Executing request: $request")
+
     val systemClock = new ManualClock()
+    systemClock.advance()
 
-    for (taskConfig <- config.tasks) {
-      systemClock.advance()
-      logger.info(s"Processing dataset: ${taskConfig.datasetID}")
+    logger.info(s"Processing dataset: ${request.datasetID}")
 
-      val transform = new TransformExtended(
-        fileSystem,
-        getSparkSubSession(sparkSession),
-        systemClock
-      )
+    val transform = new TransformExtended(
+      fileSystem,
+      getSparkSubSession(sparkSession),
+      systemClock
+    )
 
-      transform.executeExtended(taskConfig)
+    val result = transform.executeExtended(request)
 
-      logger.info(s"Done processing dataset: ${taskConfig.datasetID}")
-    }
-
-    logger.info("Finished")
+    yaml.save(Manifest(result), fileSystem, resultPath)
+    logger.info(s"Done processing dataset: ${request.datasetID}")
   }
 
   def sparkConf: SparkConf = {
