@@ -8,24 +8,33 @@
 
 package dev.kamu.engine.spark.ingest.merge
 
-import dev.kamu.core.manifests.DatasetVocabulary
-import dev.kamu.core.utils.Clock
+import java.sql.Timestamp
+
+import dev.kamu.engine.spark.ingest.utils.DFUtils._
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.lit
 
 /** Append merge strategy.
   *
   * See [[dev.kamu.core.manifests.MergeStrategyKind.Append]] for details.
   */
 class AppendMergeStrategy(
-  systemClock: Clock,
-  vocab: DatasetVocabulary = DatasetVocabulary()
-) extends MergeStrategy(systemClock, vocab) {
+  eventTimeColumn: String,
+  eventTime: Timestamp
+) extends MergeStrategy(eventTimeColumn) {
 
   override def merge(
     prevRaw: Option[DataFrame],
     currRaw: DataFrame
   ): DataFrame = {
-    val (_, curr, _, _) = prepare(prevRaw, currRaw)
+    val currWithEventTime =
+      if (currRaw.getColumn(eventTimeColumn).isDefined) {
+        currRaw
+      } else {
+        currRaw.withColumn(eventTimeColumn, lit(eventTime))
+      }
+
+    val (_, curr, _, _) = prepare(prevRaw, currWithEventTime)
     orderColumns(curr)
   }
 

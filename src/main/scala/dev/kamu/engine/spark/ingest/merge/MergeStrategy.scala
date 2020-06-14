@@ -11,8 +11,6 @@ package dev.kamu.engine.spark.ingest.merge
 import java.sql.Timestamp
 
 import dev.kamu.core.manifests
-import dev.kamu.core.manifests.DatasetVocabulary
-import dev.kamu.core.utils.Clock
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
 import dev.kamu.engine.spark.ingest.utils.TimeSeriesUtils
 import org.apache.spark.sql.DataFrame
@@ -21,28 +19,31 @@ import org.apache.spark.sql.functions.lit
 object MergeStrategy {
   def apply(
     kind: manifests.MergeStrategyKind,
-    systemClock: Clock,
-    eventTime: Option[Timestamp],
-    vocab: DatasetVocabulary
+    eventTimeColumn: String,
+    eventTime: Timestamp
   ): MergeStrategy = {
     kind match {
       case _: manifests.MergeStrategyKind.Append =>
-        new AppendMergeStrategy(systemClock, vocab)
+        new AppendMergeStrategy(
+          eventTimeColumn,
+          eventTime
+        )
       case l: manifests.MergeStrategyKind.Ledger =>
-        new LedgerMergeStrategy(l.primaryKey, systemClock, vocab)
+        new LedgerMergeStrategy(
+          eventTimeColumn,
+          l.primaryKey
+        )
       case ss: manifests.MergeStrategyKind.Snapshot =>
         val s = ss.withDefaults()
         new SnapshotMergeStrategy(
           primaryKey = s.primaryKey,
           compareColumns = s.compareColumns,
-          eventTimeColumn = s.eventTimeColumn.get,
-          eventTime = eventTime.getOrElse(systemClock.timestamp()),
+          eventTimeColumn = eventTimeColumn,
+          eventTime = eventTime,
           observationColumn = s.observationColumn.get,
           obsvAdded = s.obsvAdded.get,
           obsvChanged = s.obsvChanged.get,
-          obsvRemoved = s.obsvRemoved.get,
-          systemClock = systemClock,
-          vocab = vocab
+          obsvRemoved = s.obsvRemoved.get
         )
       case _ =>
         throw new NotImplementedError(s"Unsupported strategy: $kind")
@@ -50,10 +51,7 @@ object MergeStrategy {
   }
 }
 
-abstract class MergeStrategy(
-  systemClock: Clock,
-  vocab: DatasetVocabulary
-) {
+abstract class MergeStrategy(eventTimeColumn: String) {
 
   /** Performs merge-in of the data.
     *
@@ -72,23 +70,21 @@ abstract class MergeStrategy(
     prevRaw: Option[DataFrame],
     currRaw: DataFrame
   ): (DataFrame, DataFrame, Set[String], Set[String]) = {
-    if (currRaw.getColumn(vocab.systemTimeColumn).isDefined)
+    if (currRaw.getColumn(eventTimeColumn).isEmpty)
       throw new Exception(
-        s"Data already contains column: ${vocab.systemTimeColumn}"
+        s"Event time column $eventTimeColumn was not found amongst: " +
+          currRaw.columns.mkString(", ")
       )
 
-    val currWithSysCols = currRaw
-      .withColumn(vocab.systemTimeColumn, lit(systemClock.timestamp()))
-
-    val prevOrEmpty = prevRaw.getOrElse(TimeSeriesUtils.empty(currWithSysCols))
+    val prevOrEmpty = prevRaw.getOrElse(TimeSeriesUtils.empty(currRaw))
 
     val combinedColumns =
-      (prevOrEmpty.columns ++ currWithSysCols.columns).distinct
+      (prevOrEmpty.columns ++ currRaw.columns).distinct
 
     val addedColumns =
       combinedColumns.filter(!prevOrEmpty.hasColumn(_)).toSet
     val removedColumns =
-      combinedColumns.filter(!currWithSysCols.hasColumn(_)).toSet
+      combinedColumns.filter(!currRaw.hasColumn(_)).toSet
 
     val prev = prevOrEmpty.select(
       combinedColumns.map(
@@ -100,10 +96,10 @@ abstract class MergeStrategy(
       ): _*
     )
 
-    val curr = currWithSysCols.select(
+    val curr = currRaw.select(
       combinedColumns.map(
         c =>
-          currWithSysCols
+          currRaw
             .getColumn(c)
             .getOrElse(lit(null))
             .as(c)
@@ -119,9 +115,6 @@ abstract class MergeStrategy(
   }
 
   protected def orderColumns(dataFrame: DataFrame): DataFrame = {
-    val columns = Seq(
-      vocab.systemTimeColumn
-    ).filter(dataFrame.getColumn(_).isDefined)
-    dataFrame.columnToFront(columns: _*)
+    dataFrame.columnToFront(eventTimeColumn)
   }
 }

@@ -18,7 +18,8 @@ import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import dev.kamu.core.manifests.infra.{ExecuteQueryRequest, ExecuteQueryResult}
 import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256}
 import dev.kamu.core.utils.fs._
-import org.apache.hadoop.fs.FileSystem
+import dev.kamu.engine.spark.ingest.utils.DFUtils._
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
@@ -44,6 +45,9 @@ class TransformExtended(
     val transform =
       yaml.load[TransformKind.SparkSQL](request.source.transform.toConfig)
 
+    val resultVocab =
+      request.datasetVocabs(request.datasetID.toString).withDefaults()
+
     val inputSlices =
       prepareInputSlices(
         spark,
@@ -53,6 +57,9 @@ class TransformExtended(
       )
 
     val result = execute(request.datasetID, inputSlices, transform)
+      .orderBy(resultVocab.eventTimeColumn.get)
+      .coalesce(1)
+
     result.cache()
 
     // Compute metadata
@@ -67,12 +74,25 @@ class TransformExtended(
         ("", Interval.empty[Instant], 0L)
       }
 
-    // Write data
-    result.write
-      .mode(SaveMode.Append)
-      .parquet(
-        request.datasetLayouts(request.datasetID.toString).dataDir.toString
+    if (result.getColumn(resultVocab.systemTimeColumn.get).isDefined)
+      throw new Exception(
+        s"Transformed data contains a column that conflicts with the system column name, " +
+          s"you should either rename the data column or configure the dataset vocabulary " +
+          s"to use a different name: ${resultVocab.systemTimeColumn.get}"
       )
+
+    val resultWithSystemTime = result
+      .withColumn(
+        resultVocab.systemTimeColumn.get,
+        lit(systemClock.timestamp())
+      )
+      .columnToFront(resultVocab.systemTimeColumn.get)
+
+    // Write data
+    writeParquet(
+      resultWithSystemTime,
+      request.datasetLayouts(request.datasetID.toString).dataDir
+    )
 
     // Release memory
     result.unpersist(true)
@@ -104,7 +124,13 @@ class TransformExtended(
     inputSlices.map({
       case (id, slice) =>
         val inputSlice =
-          prepareInputSlice(spark, id, slice, inputVocabs(id), inputLayouts(id))
+          prepareInputSlice(
+            spark,
+            id,
+            slice,
+            inputVocabs(id).withDefaults(),
+            inputLayouts(id)
+          )
         (id, inputSlice)
     })
   }
@@ -120,6 +146,7 @@ class TransformExtended(
     val df = spark.read
       .parquet(layout.dataDir.toString)
       .transform(sliceData(slice.interval, vocab))
+      .drop(vocab.systemTimeColumn.get)
 
     df.cache()
 
@@ -136,7 +163,7 @@ class TransformExtended(
       case Empty() =>
         df.where(lit(false))
       case _ =>
-        val col = df.col(vocab.systemTimeColumn)
+        val col = df.col(vocab.systemTimeColumn.get)
 
         val dfLower = interval.lowerBound match {
           case Unbound() =>
@@ -162,8 +189,37 @@ class TransformExtended(
     }
   }
 
+  private def writeParquet(df: DataFrame, outDir: Path): Path = {
+    val tmpOutDir = outDir.resolve(".tmp")
+
+    df.write.parquet(tmpOutDir.toString)
+
+    val dataFiles = fileSystem
+      .listStatus(tmpOutDir)
+      .filter(_.getPath.getName.endsWith(".snappy.parquet"))
+
+    if (dataFiles.length != 1)
+      throw new RuntimeException(
+        "Unexpected number of files in output directory:\n" + fileSystem
+          .listStatus(tmpOutDir)
+          .map(_.getPath)
+          .mkString("\n")
+      )
+
+    val dataFile = dataFiles.head.getPath
+
+    val targetFile = outDir.resolve(
+      systemClock.instant().toString.replaceAll("[:.]", "") + ".snappy.parquet"
+    )
+
+    fileSystem.rename(dataFile, targetFile)
+
+    fileSystem.delete(tmpOutDir, true)
+
+    targetFile
+  }
+
   private def computeHash(df: DataFrame): String = {
-    // TODO: drop system time column first?
     new DataFrameDigestSHA256().digest(df)
   }
 

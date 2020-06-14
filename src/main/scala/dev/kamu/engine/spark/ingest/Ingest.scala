@@ -25,6 +25,7 @@ import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.lit
 import org.datasyslab.geospark.formatMapper.GeoJsonReader
 import org.datasyslab.geospark.formatMapper.shapefileParser.ShapefileReader
 import org.datasyslab.geosparksql.utils.Adapter
@@ -34,6 +35,7 @@ class Ingest(
   fileSystem: FileSystem,
   systemClock: Clock
 ) {
+  private val corruptRecordColumn = "__corrupt_record__"
   private val logger = LogManager.getLogger(getClass.getName)
 
   def ingest(spark: SparkSession, request: IngestRequest): IngestResult = {
@@ -43,7 +45,7 @@ class Ingest(
       request.eventTime,
       request.dataToIngest,
       request.datasetLayout.dataDir,
-      request.datasetVocab
+      request.datasetVocab.withDefaults()
     )
 
     IngestResult(block = block)
@@ -73,20 +75,16 @@ class Ingest(
         readGeneric _
     }
 
-    val result = reader(spark, source, filePath, vocab)
-      .transform(checkForErrors(vocab))
+    val result = reader(spark, source, filePath)
+      .transform(checkForErrors)
       .transform(normalizeSchema(source))
       .transform(preprocess(source))
       .transform(mergeWithExisting(source, eventTime, outPath, vocab))
-      .coalesce(1)
-      .maybeTransform(
-        vocab.eventTimeColumn.isDefined,
-        _.sort(vocab.eventTimeColumn.get)
-      )
+      .transform(postprocess(vocab))
 
     result.cache()
 
-    val hash = computeHash(result)
+    val hash = computeHash(result.drop(vocab.systemTimeColumn.get))
     val numRecords = result.count()
 
     writeParquet(result, outPath)
@@ -109,8 +107,7 @@ class Ingest(
   private def readGeneric(
     spark: SparkSession,
     source: SourceKind.Root,
-    filePath: Path,
-    vocab: DatasetVocabulary
+    filePath: Path
   ): DataFrame = {
     val fmt = source.read.asGeneric().asInstanceOf[ReaderKind.Generic]
     val reader = spark.read
@@ -122,7 +119,7 @@ class Ingest(
       .format(fmt.name)
       .options(fmt.options)
       .option("mode", "PERMISSIVE")
-      .option("columnNameOfCorruptRecord", vocab.corruptRecordColumn)
+      .option("columnNameOfCorruptRecord", corruptRecordColumn)
       .load(filePath.toString)
   }
 
@@ -130,8 +127,7 @@ class Ingest(
   private def readShapefile(
     spark: SparkSession,
     source: SourceKind.Root,
-    filePath: Path,
-    vocab: DatasetVocabulary
+    filePath: Path
   ): DataFrame = {
     val fmt = source.read.asInstanceOf[ReaderKind.Shapefile]
 
@@ -167,8 +163,7 @@ class Ingest(
   private def readGeoJSON(
     spark: SparkSession,
     source: SourceKind.Root,
-    filePath: Path,
-    vocab: DatasetVocabulary
+    filePath: Path
   ): DataFrame = {
     val rdd = GeoJsonReader.readToGeometryRDD(
       spark.sparkContext,
@@ -185,10 +180,8 @@ class Ingest(
       )
   }
 
-  private def checkForErrors(
-    vocab: DatasetVocabulary
-  )(df: DataFrame): DataFrame = {
-    df.getColumn(vocab.corruptRecordColumn) match {
+  private def checkForErrors(df: DataFrame): DataFrame = {
+    df.getColumn(corruptRecordColumn) match {
       case None =>
         df
       case Some(col) =>
@@ -260,21 +253,41 @@ class Ingest(
     curr: DataFrame
   ): DataFrame = {
     val spark = curr.sparkSession
+
     val mergeStrategy = MergeStrategy(
       kind = source.merge,
-      systemClock = systemClock,
-      eventTime = eventTime.map(Timestamp.from),
-      vocab = vocab
+      eventTimeColumn = vocab.eventTimeColumn.get,
+      eventTime = Timestamp.from(eventTime.getOrElse(systemClock.instant()))
     )
 
-    val prev =
-      if (fileSystem.exists(outPath))
-        Some(spark.read.parquet(outPath.toString))
-      else
-        None
+    // Drop system columns before merging
+    val prev = Some(outPath)
+      .filter(fileSystem.exists)
+      .map(
+        p =>
+          spark.read
+            .parquet(p.toString)
+            .drop(vocab.systemTimeColumn.get)
+      )
 
     // TODO: Cache prev and curr?
     mergeStrategy.merge(prev, curr)
+  }
+
+  private def postprocess(
+    vocab: DatasetVocabulary
+  )(df: DataFrame): DataFrame = {
+    if (df.getColumn(vocab.systemTimeColumn.get).isDefined)
+      throw new Exception(
+        s"Ingested data contains a column that conflicts with the system column name, " +
+          s"you should either rename the data column or configure the dataset vocabulary " +
+          s"to use a different name: ${vocab.systemTimeColumn.get}"
+      )
+
+    df.coalesce(1)
+      .orderBy(vocab.eventTimeColumn.get)
+      .withColumn(vocab.systemTimeColumn.get, lit(systemClock.timestamp()))
+      .columnToFront(vocab.systemTimeColumn.get)
   }
 
   private def writeParquet(df: DataFrame, outDir: Path): Path = {
@@ -308,7 +321,6 @@ class Ingest(
   }
 
   private def computeHash(df: DataFrame): String = {
-    // TODO: drop system time column first?
     new DataFrameDigestSHA256().digest(df)
   }
 

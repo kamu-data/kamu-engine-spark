@@ -10,8 +10,6 @@ package dev.kamu.engine.spark.ingest.merge
 
 import java.sql.Timestamp
 
-import dev.kamu.core.manifests.DatasetVocabulary
-import dev.kamu.core.utils.Clock
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
 import dev.kamu.engine.spark.ingest.utils.TimeSeriesUtils
 import org.apache.spark.sql.DataFrame
@@ -24,15 +22,13 @@ import org.apache.spark.sql.functions._
 class SnapshotMergeStrategy(
   primaryKey: Vector[String],
   compareColumns: Vector[String] = Vector.empty,
-  systemClock: Clock,
+  eventTimeColumn: String,
   eventTime: Timestamp,
-  eventTimeColumn: String = "event_time",
   observationColumn: String = "observed",
   obsvAdded: String = "I",
   obsvChanged: String = "U",
-  obsvRemoved: String = "D",
-  vocab: DatasetVocabulary = DatasetVocabulary()
-) extends MergeStrategy(systemClock, vocab) {
+  obsvRemoved: String = "D"
+) extends MergeStrategy(eventTimeColumn) {
 
   override def merge(
     prevRaw: Option[DataFrame],
@@ -43,9 +39,7 @@ class SnapshotMergeStrategy(
     ensureEventTimeDoesntGoBackwards(prev, curr)
 
     val dataColumns = curr.columns
-      .filter(
-        c => c != vocab.systemTimeColumn && c != eventTimeColumn && c != observationColumn
-      )
+      .filter(c => c != eventTimeColumn && c != observationColumn)
       .toVector
 
     val columnsToCompare =
@@ -96,17 +90,17 @@ class SnapshotMergeStrategy(
       )
 
     val resultColumns = (
-      lit(systemClock.timestamp()).as(vocab.systemTimeColumn)
-        :: when(
-          col(observationColumn) === obsvRemoved,
-          lit(eventTime)
-        ).otherwise(curr(eventTimeColumn)).as(eventTimeColumn)
+      when(
+        col(observationColumn) === obsvRemoved,
+        lit(eventTime)
+      ).otherwise(curr(eventTimeColumn))
+        .as(eventTimeColumn)
         :: col(observationColumn)
         :: resultDataColumns.toList
     )
 
     val result = curr
-      .drop(vocab.systemTimeColumn, observationColumn)
+      .drop(observationColumn)
       .join(
         prevProj,
         primaryKey.map(c => prevProj(c) <=> curr(c)).reduce(_ && _),
@@ -156,7 +150,10 @@ class SnapshotMergeStrategy(
     currRaw: DataFrame
   ): (DataFrame, DataFrame, Set[String], Set[String]) = {
     if (currRaw.hasColumn(eventTimeColumn))
-      throw new Exception(s"Data already contains column: $eventTimeColumn")
+      throw new Exception(
+        s"Data already contains column: $eventTimeColumn"
+      )
+
     if (currRaw.hasColumn(observationColumn))
       throw new Exception(s"Data already contains column: $observationColumn")
 
@@ -165,14 +162,5 @@ class SnapshotMergeStrategy(
       .withColumn(observationColumn, lit(obsvAdded))
 
     super.prepare(prevRaw, currWithMergeCols)
-  }
-
-  override protected def orderColumns(dataFrame: DataFrame): DataFrame = {
-    val columns = Seq(
-      vocab.systemTimeColumn,
-      eventTimeColumn,
-      observationColumn
-    ).filter(dataFrame.getColumn(_).isDefined)
-    dataFrame.columnToFront(columns: _*)
   }
 }

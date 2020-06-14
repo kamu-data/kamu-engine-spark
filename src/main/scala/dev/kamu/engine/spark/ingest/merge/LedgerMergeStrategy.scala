@@ -8,8 +8,6 @@
 
 package dev.kamu.engine.spark.ingest.merge
 
-import dev.kamu.core.manifests.DatasetVocabulary
-import dev.kamu.core.utils.Clock
 import org.apache.spark.sql.DataFrame
 
 /** Ledger merge strategy.
@@ -30,10 +28,9 @@ import org.apache.spark.sql.DataFrame
   * @param pk primary key column name
   */
 class LedgerMergeStrategy(
-  pk: Vector[String],
-  systemClock: Clock,
-  vocab: DatasetVocabulary = DatasetVocabulary()
-) extends MergeStrategy(systemClock, vocab) {
+  eventTimeColumn: String,
+  pk: Vector[String]
+) extends MergeStrategy(eventTimeColumn) {
 
   override def merge(
     prevRaw: Option[DataFrame],

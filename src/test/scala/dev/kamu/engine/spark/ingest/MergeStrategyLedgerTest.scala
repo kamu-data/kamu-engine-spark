@@ -20,12 +20,6 @@ class MergeStrategyLedgerTest extends FunSuite with KamuDataFrameSuite {
 
   protected override val enableHiveSupport = false
 
-  def clockAt(timestamp: Timestamp) = {
-    val systemClock = new ManualClock()
-    systemClock.set(timestamp)
-    systemClock
-  }
-
   test("From empty") {
     val curr = sc
       .parallelize(
@@ -37,21 +31,21 @@ class MergeStrategyLedgerTest extends FunSuite with KamuDataFrameSuite {
       )
       .toDF("event_time", "id", "data")
 
-    val strategy = new LedgerMergeStrategy(Vector("id"), clockAt(ts(3)))
+    val strategy = new LedgerMergeStrategy("event_time", Vector("id"))
 
     val actual = strategy
       .merge(None, curr)
-      .orderBy("system_time", "event_time", "id")
+      .orderBy("event_time", "id")
 
     val expected = sc
       .parallelize(
         Seq(
-          (ts(3), ts(0), 1, "a"),
-          (ts(3), ts(1), 2, "b"),
-          (ts(3), ts(2), 3, "c")
+          (ts(0), 1, "a"),
+          (ts(1), 2, "b"),
+          (ts(2), 3, "c")
         )
       )
-      .toDF("system_time", "event_time", "id", "data")
+      .toDF("event_time", "id", "data")
 
     assertDataFrameEquals(expected, actual, ignoreNullable = true)
   }
@@ -60,12 +54,12 @@ class MergeStrategyLedgerTest extends FunSuite with KamuDataFrameSuite {
     val prev = sc
       .parallelize(
         Seq(
-          (ts(3), ts(0), 1, "a"),
-          (ts(3), ts(1), 2, "b"),
-          (ts(3), ts(2), 3, "c")
+          (ts(0), 1, "a"),
+          (ts(1), 2, "b"),
+          (ts(2), 3, "c")
         )
       )
-      .toDF("system_time", "event_time", "id", "data")
+      .toDF("event_time", "id", "data")
 
     val curr = sc
       .parallelize(
@@ -80,21 +74,21 @@ class MergeStrategyLedgerTest extends FunSuite with KamuDataFrameSuite {
       )
       .toDF("event_time", "id", "data")
 
-    val strategy = new LedgerMergeStrategy(Vector("id"), clockAt(ts(6)))
+    val strategy = new LedgerMergeStrategy("event_time", Vector("id"))
 
     val actual = strategy
       .merge(Some(prev), curr)
-      .orderBy("system_time", "event_time", "id")
+      .orderBy("event_time", "id")
 
     val expected = sc
       .parallelize(
         Seq(
-          (ts(6), ts(3), 4, "d"),
-          (ts(6), ts(4), 5, "e"),
-          (ts(6), ts(5), 6, "f")
+          (ts(3), 4, "d"),
+          (ts(4), 5, "e"),
+          (ts(5), 6, "f")
         )
       )
-      .toDF("system_time", "event_time", "id", "data")
+      .toDF("event_time", "id", "data")
 
     assertDataFrameEquals(expected, actual, ignoreNullable = true)
   }
@@ -103,12 +97,12 @@ class MergeStrategyLedgerTest extends FunSuite with KamuDataFrameSuite {
     val prev = sc
       .parallelize(
         Seq(
-          (ts(3), ts(0), 1, "a"),
-          (ts(3), ts(1), 2, "b"),
-          (ts(3), ts(2), 3, "c")
+          (ts(0), 1, "a"),
+          (ts(1), 2, "b"),
+          (ts(2), 3, "c")
         )
       )
-      .toDF("system_time", "event_time", "id", "data")
+      .toDF("event_time", "id", "data")
 
     val curr = sc
       .parallelize(
@@ -123,21 +117,21 @@ class MergeStrategyLedgerTest extends FunSuite with KamuDataFrameSuite {
       )
       .toDF("event_time", "id", "extra", "data")
 
-    val strategy = new LedgerMergeStrategy(Vector("id"), clockAt(ts(6)))
+    val strategy = new LedgerMergeStrategy("event_time", Vector("id"))
 
     val actual = strategy
       .merge(Some(prev), curr)
-      .orderBy("system_time", "event_time", "id")
+      .orderBy("event_time", "id")
 
     val expected = sc
       .parallelize(
         Seq(
-          (ts(6), ts(3), 4, "d", "x"),
-          (ts(6), ts(4), 5, "e", "y"),
-          (ts(6), ts(5), 6, "f", "z")
+          (ts(3), 4, "d", "x"),
+          (ts(4), 5, "e", "y"),
+          (ts(5), 6, "f", "z")
         )
       )
-      .toDF("system_time", "event_time", "id", "data", "extra")
+      .toDF("event_time", "id", "data", "extra")
 
     assertDataFrameEquals(expected, actual, ignoreNullable = true)
   }
@@ -147,12 +141,12 @@ class MergeStrategyLedgerTest extends FunSuite with KamuDataFrameSuite {
     val prev = sc
       .parallelize(
         Seq(
-          (ts(3), ts(0), 1, "x", "a"),
-          (ts(3), ts(1), 2, "y", "b"),
-          (ts(3), ts(2), 3, "z", "c")
+          (ts(0), 1, "x", "a"),
+          (ts(1), 2, "y", "b"),
+          (ts(2), 3, "z", "c")
         )
       )
-      .toDF("system_time", "event_time", "id", "extra", "data")
+      .toDF("event_time", "id", "extra", "data")
 
     val curr = sc
       .parallelize(
@@ -167,21 +161,21 @@ class MergeStrategyLedgerTest extends FunSuite with KamuDataFrameSuite {
       )
       .toDF("event_time", "id", "data")
 
-    val strategy = new LedgerMergeStrategy(Vector("id"), clockAt(ts(6)))
+    val strategy = new LedgerMergeStrategy("event_time", Vector("id"))
 
     val actual = strategy
       .merge(Some(prev), curr)
-      .orderBy("system_time", "event_time", "id")
+      .orderBy("event_time", "id")
 
     val expected = sc
       .parallelize(
         Seq(
-          (ts(6), ts(3), 4, null, "d"),
-          (ts(6), ts(4), 5, null, "e"),
-          (ts(6), ts(5), 6, null, "f")
+          (ts(3), 4, null, "d"),
+          (ts(4), 5, null, "e"),
+          (ts(5), 6, null, "f")
         )
       )
-      .toDF("system_time", "event_time", "id", "extra", "data")
+      .toDF("event_time", "id", "extra", "data")
 
     assertDataFrameEquals(expected, actual, ignoreNullable = true)
   }

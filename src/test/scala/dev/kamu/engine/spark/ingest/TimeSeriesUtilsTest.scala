@@ -18,17 +18,17 @@ class TimeSeriesUtilsTest extends FunSuite with KamuDataFrameSuite {
   def testSeries =
     sc.parallelize(
         Seq(
-          (ts(0), ts(0), "I", 1, "A", "x"),
-          (ts(0), ts(0), "I", 2, "B", "y"),
-          (ts(0), ts(0), "I", 3, "C", "z"),
-          (ts(0), ts(1), "U", 1, "A", "a"),
-          (ts(0), ts(1), "U", 2, "B", "b"),
-          (ts(0), ts(2), "D", 1, "A", "a"),
-          (ts(0), ts(2), "U", 2, "B", "bb"),
-          (ts(0), ts(3), "I", 4, "D", "d")
+          (ts(0), "I", 1, "A", "x"),
+          (ts(0), "I", 2, "B", "y"),
+          (ts(0), "I", 3, "C", "z"),
+          (ts(1), "U", 1, "A", "a"),
+          (ts(1), "U", 2, "B", "b"),
+          (ts(2), "D", 1, "A", "a"),
+          (ts(2), "U", 2, "B", "bb"),
+          (ts(3), "I", 4, "D", "d")
         )
       )
-      .toDF("system_time", "event_time", "observed", "id", "name", "data")
+      .toDF("event_time", "observed", "id", "name", "data")
 
   test("asOf latest") {
     val series = testSeries
@@ -47,12 +47,12 @@ class TimeSeriesUtilsTest extends FunSuite with KamuDataFrameSuite {
     val expected = sc
       .parallelize(
         Seq(
-          (ts(0), ts(2), "U", 2, "B", "bb"),
-          (ts(0), ts(0), "I", 3, "C", "z"),
-          (ts(0), ts(3), "I", 4, "D", "d")
+          (ts(2), "U", 2, "B", "bb"),
+          (ts(0), "I", 3, "C", "z"),
+          (ts(3), "I", 4, "D", "d")
         )
       )
-      .toDF("system_time", "event_time", "observed", "id", "name", "data")
+      .toDF("event_time", "observed", "id", "name", "data")
 
     assertDataFrameEquals(expected, actual, ignoreNullable = true)
   }
@@ -74,13 +74,12 @@ class TimeSeriesUtilsTest extends FunSuite with KamuDataFrameSuite {
     val expected = sc
       .parallelize(
         Seq(
-          (ts(0), ts(1), "U", 1, "A", "a"),
-          (ts(0), ts(1), "U", 2, "B", "b"),
-          (ts(0), ts(0), "I", 3, "C", "z")
+          (ts(1), "U", 1, "A", "a"),
+          (ts(1), "U", 2, "B", "b"),
+          (ts(0), "I", 3, "C", "z")
         )
       )
       .toDF(
-        "system_time",
         "event_time",
         "observed",
         "id",
@@ -95,18 +94,17 @@ class TimeSeriesUtilsTest extends FunSuite with KamuDataFrameSuite {
     val series = sc
       .parallelize(
         Seq(
-          (ts(0), ts(0), "I", 1, "A", "x"),
-          (ts(0), ts(0), "I", 1, "B", "y"),
-          (ts(0), ts(0), "I", 2, "C", "z"),
-          (ts(0), ts(1), "U", 1, "A", "a"),
-          (ts(0), ts(1), "U", 1, "B", "b"),
-          (ts(0), ts(2), "D", 1, "A", "a"),
-          (ts(0), ts(2), "U", 1, "B", "bb"),
-          (ts(0), ts(3), "I", 2, "D", "d")
+          (ts(0), "I", 1, "A", "x"),
+          (ts(0), "I", 1, "B", "y"),
+          (ts(0), "I", 2, "C", "z"),
+          (ts(1), "U", 1, "A", "a"),
+          (ts(1), "U", 1, "B", "b"),
+          (ts(2), "D", 1, "A", "a"),
+          (ts(2), "U", 1, "B", "bb"),
+          (ts(3), "I", 2, "D", "d")
         )
       )
       .toDF(
-        "system_time",
         "event_time",
         "observed",
         "key",
@@ -128,13 +126,12 @@ class TimeSeriesUtilsTest extends FunSuite with KamuDataFrameSuite {
     val expected = sc
       .parallelize(
         Seq(
-          (ts(0), ts(2), "U", 1, "B", "bb"),
-          (ts(0), ts(0), "I", 2, "C", "z"),
-          (ts(0), ts(3), "I", 2, "D", "d")
+          (ts(2), "U", 1, "B", "bb"),
+          (ts(0), "I", 2, "C", "z"),
+          (ts(3), "I", 2, "D", "d")
         )
       )
       .toDF(
-        "system_time",
         "event_time",
         "observed",
         "key",

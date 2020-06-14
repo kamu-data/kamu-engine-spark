@@ -20,38 +20,62 @@ class MergeStrategyAppendTest extends FunSuite with KamuDataFrameSuite {
 
   protected override val enableHiveSupport = false
 
-  def clockAt(timestamp: Timestamp) = {
-    val systemClock = new ManualClock()
-    systemClock.set(timestamp)
-    systemClock
-  }
-
-  test("From empty") {
+  test("From empty - without event time") {
     val curr = sc
       .parallelize(
         Seq(
-          (ts(0), 1, "a"),
-          (ts(0), 2, "b"),
-          (ts(0), 3, "c")
+          (1, "a"),
+          (2, "b"),
+          (3, "c")
         )
       )
-      .toDF("event_time", "id", "data")
+      .toDF("id", "data")
 
-    val strategy = new AppendMergeStrategy(clockAt(ts(1)))
+    val strategy = new AppendMergeStrategy("event_time", ts(1))
 
     val actual = strategy
       .merge(None, curr)
-      .orderBy("system_time", "event_time", "id")
+      .orderBy("id")
 
     val expected = sc
       .parallelize(
         Seq(
-          (ts(1), ts(0), 1, "a"),
-          (ts(1), ts(0), 2, "b"),
-          (ts(1), ts(0), 3, "c")
+          (ts(1), 1, "a"),
+          (ts(1), 2, "b"),
+          (ts(1), 3, "c")
         )
       )
-      .toDF("system_time", "event_time", "id", "data")
+      .toDF("event_time", "id", "data")
+
+    assertDataFrameEquals(expected, actual, ignoreNullable = true)
+  }
+
+  test("From empty - with event time") {
+    val curr = sc
+      .parallelize(
+        Seq(
+          (ts(0), 1, "a"),
+          (ts(1), 2, "b"),
+          (ts(2), 3, "c")
+        )
+      )
+      .toDF("event_time", "id", "data")
+
+    val strategy = new AppendMergeStrategy("event_time", ts(1))
+
+    val actual = strategy
+      .merge(None, curr)
+      .orderBy("event_time", "id")
+
+    val expected = sc
+      .parallelize(
+        Seq(
+          (ts(0), 1, "a"),
+          (ts(1), 2, "b"),
+          (ts(2), 3, "c")
+        )
+      )
+      .toDF("event_time", "id", "data")
 
     assertDataFrameEquals(expected, actual, ignoreNullable = true)
   }
@@ -60,12 +84,12 @@ class MergeStrategyAppendTest extends FunSuite with KamuDataFrameSuite {
     val prev = sc
       .parallelize(
         Seq(
-          (ts(1), ts(0), 1, "a"),
-          (ts(1), ts(0), 2, "b"),
-          (ts(1), ts(0), 3, "c")
+          (ts(0), 1, "a"),
+          (ts(0), 2, "b"),
+          (ts(0), 3, "c")
         )
       )
-      .toDF("system_time", "event_time", "id", "data")
+      .toDF("event_time", "id", "data")
 
     val curr = sc
       .parallelize(
@@ -77,21 +101,21 @@ class MergeStrategyAppendTest extends FunSuite with KamuDataFrameSuite {
       )
       .toDF("event_time", "id", "data")
 
-    val strategy = new AppendMergeStrategy(clockAt(ts(2)))
+    val strategy = new AppendMergeStrategy("event_time", ts(2))
 
     val actual = strategy
       .merge(Some(prev), curr)
-      .orderBy("system_time", "event_time", "id")
+      .orderBy("event_time", "id")
 
     val expected = sc
       .parallelize(
         Seq(
-          (ts(2), ts(1), 4, "d"),
-          (ts(2), ts(1), 5, "e"),
-          (ts(2), ts(1), 6, "f")
+          (ts(1), 4, "d"),
+          (ts(1), 5, "e"),
+          (ts(1), 6, "f")
         )
       )
-      .toDF("system_time", "event_time", "id", "data")
+      .toDF("event_time", "id", "data")
 
     assertDataFrameEquals(expected, actual, ignoreNullable = true)
   }
@@ -100,12 +124,12 @@ class MergeStrategyAppendTest extends FunSuite with KamuDataFrameSuite {
     val prev = sc
       .parallelize(
         Seq(
-          (ts(1), ts(0), 1, "a"),
-          (ts(1), ts(0), 2, "b"),
-          (ts(1), ts(0), 3, "c")
+          (ts(0), 1, "a"),
+          (ts(0), 2, "b"),
+          (ts(0), 3, "c")
         )
       )
-      .toDF("system_time", "event_time", "id", "data")
+      .toDF("event_time", "id", "data")
 
     val curr = sc
       .parallelize(
@@ -117,21 +141,21 @@ class MergeStrategyAppendTest extends FunSuite with KamuDataFrameSuite {
       )
       .toDF("event_time", "id", "extra", "data")
 
-    val strategy = new AppendMergeStrategy(clockAt(ts(2)))
+    val strategy = new AppendMergeStrategy("event_time", ts(2))
 
     val actual = strategy
       .merge(Some(prev), curr)
-      .orderBy("system_time", "event_time", "id")
+      .orderBy("event_time", "id")
 
     val expected = sc
       .parallelize(
         Seq(
-          (ts(2), ts(1), 4, "d", "x"),
-          (ts(2), ts(1), 5, "e", "y"),
-          (ts(2), ts(1), 6, "f", "z")
+          (ts(1), 4, "d", "x"),
+          (ts(1), 5, "e", "y"),
+          (ts(1), 6, "f", "z")
         )
       )
-      .toDF("system_time", "event_time", "id", "data", "extra")
+      .toDF("event_time", "id", "data", "extra")
 
     assertDataFrameEquals(expected, actual, ignoreNullable = true)
   }
@@ -141,12 +165,12 @@ class MergeStrategyAppendTest extends FunSuite with KamuDataFrameSuite {
     val prev = sc
       .parallelize(
         Seq(
-          (ts(1), ts(0), 1, "x", "a"),
-          (ts(1), ts(0), 2, "y", "b"),
-          (ts(1), ts(0), 3, "z", "c")
+          (ts(0), 1, "x", "a"),
+          (ts(0), 2, "y", "b"),
+          (ts(0), 3, "z", "c")
         )
       )
-      .toDF("system_time", "event_time", "id", "extra", "data")
+      .toDF("event_time", "id", "extra", "data")
 
     val curr = sc
       .parallelize(
@@ -158,21 +182,21 @@ class MergeStrategyAppendTest extends FunSuite with KamuDataFrameSuite {
       )
       .toDF("event_time", "id", "data")
 
-    val strategy = new AppendMergeStrategy(clockAt(ts(2)))
+    val strategy = new AppendMergeStrategy("event_time", ts(2))
 
     val actual = strategy
       .merge(Some(prev), curr)
-      .orderBy("system_time", "event_time", "id")
+      .orderBy("event_time", "id")
 
     val expected = sc
       .parallelize(
         Seq(
-          (ts(2), ts(1), 4, null, "d"),
-          (ts(2), ts(1), 5, null, "e"),
-          (ts(2), ts(1), 6, null, "f")
+          (ts(1), 4, null, "d"),
+          (ts(1), 5, null, "e"),
+          (ts(1), 6, null, "f")
         )
       )
-      .toDF("system_time", "event_time", "id", "extra", "data")
+      .toDF("event_time", "id", "extra", "data")
 
     assertDataFrameEquals(expected, actual, ignoreNullable = true)
   }
