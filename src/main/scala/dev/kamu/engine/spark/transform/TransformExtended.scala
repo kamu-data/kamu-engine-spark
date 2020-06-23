@@ -8,25 +8,31 @@
 
 package dev.kamu.engine.spark.transform
 
+import java.io.PrintWriter
 import java.sql.Timestamp
 import java.time.Instant
+import java.util.Scanner
 
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests.infra.{ExecuteQueryRequest, ExecuteQueryResult}
+import dev.kamu.core.manifests.infra.{
+  ExecuteQueryRequest,
+  ExecuteQueryResult,
+  InputDataSlice
+}
 import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256}
 import dev.kamu.core.utils.fs._
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{lit, max}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import spire.math.{Empty, Interval}
 import spire.math.interval.{Closed, Open, Unbound}
 
-case class InputSlice(dataFrame: DataFrame, dataSlice: DataSlice)
+case class InputSlice(dataFrame: DataFrame, interval: Interval[Instant])
 
 /** Houses logic that eventually should be moved to the coordinator side **/
 class TransformExtended(
@@ -45,6 +51,8 @@ class TransformExtended(
     val transform =
       yaml.load[TransformKind.SparkSQL](request.source.transform.toConfig)
 
+    val resultLayout = request.datasetLayouts(request.datasetID.toString)
+
     val resultVocab =
       request.datasetVocabs(request.datasetID.toString).withDefaults()
 
@@ -56,23 +64,43 @@ class TransformExtended(
         typedMap(request.datasetLayouts)
       )
 
+    inputSlices.values.foreach(_.dataFrame.cache())
+
     val result = execute(request.datasetID, inputSlices, transform)
       .orderBy(resultVocab.eventTimeColumn.get)
       .coalesce(1)
 
     result.cache()
 
-    // Compute metadata
-    val (resultHash, resultInterval, resultNumRecords) =
-      if (!result.isEmpty) {
-        (
-          computeHash(result),
-          Interval.point(systemClock.instant()),
-          result.count()
+    // Prepare metadata
+    val lastWatermark =
+      request.inputSlices.values.map(_.explicitWatermarks.map(_.eventTime))
+
+    val block = MetadataBlock(
+      prevBlockHash = "",
+      systemTime = systemClock.instant(),
+      outputSlice = Some(
+        DataSlice(
+          hash = computeHash(result),
+          interval =
+            if (result.isEmpty) Interval.empty
+            else Interval.point(systemClock.instant()),
+          numRecords = result.count()
         )
-      } else {
-        ("", Interval.empty[Instant], 0L)
-      }
+      ),
+      outputWatermark = getLastWatermark(
+        typedMap(request.inputSlices),
+        resultLayout.checkpointsDir
+      ),
+      inputSlices = request.source.inputs.map(i => {
+        val slice = inputSlices(i.id)
+        DataSlice(
+          hash = computeHash(slice.dataFrame),
+          interval = slice.interval,
+          numRecords = slice.dataFrame.count()
+        )
+      })
+    )
 
     if (result.getColumn(resultVocab.systemTimeColumn.get).isDefined)
       throw new Exception(
@@ -89,35 +117,18 @@ class TransformExtended(
       .columnToFront(resultVocab.systemTimeColumn.get)
 
     // Write data
-    writeParquet(
-      resultWithSystemTime,
-      request.datasetLayouts(request.datasetID.toString).dataDir
-    )
+    writeParquet(resultWithSystemTime, resultLayout.dataDir)
 
     // Release memory
     result.unpersist(true)
     inputSlices.values.foreach(_.dataFrame.unpersist(true))
-
-    val block = MetadataBlock(
-      prevBlockHash = "",
-      // TODO: Current time? Min of input times? Require to propagate in computations?
-      systemTime = systemClock.instant(),
-      outputSlice = Some(
-        DataSlice(
-          hash = resultHash,
-          interval = resultInterval,
-          numRecords = resultNumRecords
-        )
-      ),
-      inputSlices = request.source.inputs.map(i => inputSlices(i.id).dataSlice)
-    )
 
     ExecuteQueryResult(block = block, dataFileName = None)
   }
 
   private def prepareInputSlices(
     spark: SparkSession,
-    inputSlices: Map[DatasetID, DataSlice],
+    inputSlices: Map[DatasetID, InputDataSlice],
     inputVocabs: Map[DatasetID, DatasetVocabulary],
     inputLayouts: Map[DatasetID, DatasetLayout]
   ): Map[DatasetID, InputSlice] = {
@@ -138,7 +149,7 @@ class TransformExtended(
   private def prepareInputSlice(
     spark: SparkSession,
     id: DatasetID,
-    slice: DataSlice,
+    slice: InputDataSlice,
     vocab: DatasetVocabulary,
     layout: DatasetLayout
   ): InputSlice = {
@@ -148,11 +159,9 @@ class TransformExtended(
       .transform(sliceData(slice.interval, vocab))
       .drop(vocab.systemTimeColumn.get)
 
-    df.cache()
-
     InputSlice(
       dataFrame = df,
-      dataSlice = slice.copy(hash = computeHash(df), numRecords = df.count())
+      interval = slice.interval
     )
   }
 
@@ -219,7 +228,69 @@ class TransformExtended(
     targetFile
   }
 
+  private def getLastWatermark(
+    inputSlices: Map[DatasetID, InputDataSlice],
+    checkpointDir: Path
+  ): Option[Instant] = {
+    // Computes watermark as minimum of all input watermarks
+
+    val previousWatermarks =
+      readLastWatermarks(inputSlices.keys.toSeq, checkpointDir)
+
+    val currentWatermarks =
+      inputSlices.map {
+        case (id, slice) =>
+          maxOption(slice.explicitWatermarks.map(_.eventTime))
+            .orElse(previousWatermarks(id))
+      }
+
+    if (!currentWatermarks.forall(_.isDefined))
+      None
+    else
+      Some(currentWatermarks.flatten.min)
+  }
+
+  private def writeLastWatermarks(
+    watermarks: Map[DatasetID, Option[Instant]],
+    checkpointDir: Path
+  ): Unit = {
+    fileSystem.mkdirs(checkpointDir)
+
+    watermarks.filter(_._2.isDefined).foreach {
+      case (id, wm) =>
+        val outputStream =
+          fileSystem.create(checkpointDir.resolve(id.toString), true)
+        val writer = new PrintWriter(outputStream)
+
+        writer.println(wm.get.toString)
+
+        writer.close()
+        outputStream.close()
+    }
+  }
+
+  private def readLastWatermarks(
+    datasetIDs: Seq[DatasetID],
+    checkpointDir: Path
+  ): Map[DatasetID, Option[Instant]] = {
+    datasetIDs
+      .map(id => {
+        val wmPath = checkpointDir.resolve(id.toString)
+        if (!fileSystem.exists(wmPath)) {
+          (id, None)
+        } else {
+          val reader = new Scanner(fileSystem.open(wmPath))
+          val watermark = Instant.parse(reader.nextLine())
+          reader.close()
+          (id, Some(watermark))
+        }
+      })
+      .toMap
+  }
+
   private def computeHash(df: DataFrame): String = {
+    if (df.isEmpty)
+      return ""
     new DataFrameDigestSHA256().digest(df)
   }
 
@@ -227,6 +298,13 @@ class TransformExtended(
     m.map {
       case (id, value) => (DatasetID(id), value)
     }
+  }
+
+  private def maxOption[T: Ordering](seq: Seq[T]): Option[T] = {
+    if (seq.isEmpty)
+      None
+    else
+      Some(seq.max)
   }
 
 }

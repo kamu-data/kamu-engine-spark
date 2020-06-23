@@ -8,8 +8,10 @@
 
 package dev.kamu.engine.spark.ingest
 
+import java.io.PrintWriter
 import java.sql.Timestamp
 import java.time.Instant
+import java.util.Scanner
 import java.util.zip.ZipInputStream
 
 import dev.kamu.core.manifests._
@@ -44,6 +46,7 @@ class Ingest(
       request.source,
       request.eventTime,
       request.dataToIngest,
+      request.datasetLayout.checkpointsDir,
       request.datasetLayout.dataDir,
       request.datasetVocab.withDefaults()
     )
@@ -56,6 +59,7 @@ class Ingest(
     source: SourceKind.Root,
     eventTime: Option[Instant],
     filePath: Path,
+    checkpointsDir: Path,
     outPath: Path,
     vocab: DatasetVocabulary
   ): MetadataBlock = {
@@ -84,24 +88,26 @@ class Ingest(
 
     result.cache()
 
-    val hash = computeHash(result.drop(vocab.systemTimeColumn.get))
-    val numRecords = result.count()
+    val block = MetadataBlock(
+      prevBlockHash = "",
+      systemTime = systemClock.instant(),
+      outputSlice = Some(
+        DataSlice(
+          hash = computeHash(result.drop(vocab.systemTimeColumn.get)),
+          numRecords = result.count(),
+          interval =
+            if (result.isEmpty) Interval.empty
+            else Interval.point(systemClock.instant())
+        )
+      ),
+      outputWatermark = getLastWatermark(result, checkpointsDir, vocab)
+    )
 
     writeParquet(result, outPath)
 
     result.unpersist()
 
-    MetadataBlock(
-      prevBlockHash = "",
-      systemTime = systemClock.instant(),
-      outputSlice = Some(
-        DataSlice(
-          hash = hash,
-          numRecords = numRecords,
-          interval = Interval.point(systemClock.instant())
-        )
-      )
-    )
+    block
   }
 
   private def readGeneric(
@@ -320,7 +326,57 @@ class Ingest(
     targetFile
   }
 
+  // TODO: Out-of-order tolerance
+  // TODO: Idle datasets
+  private def getLastWatermark(
+    result: Dataset[Row],
+    checkpointsDir: Path,
+    vocab: DatasetVocabulary
+  ): Option[Instant] = {
+    if (result.isEmpty) {
+      readLastWatermark(checkpointsDir)
+    } else {
+      val wm = result
+        .selectExpr(s"max(cast(`${vocab.eventTimeColumn.get}` as TIMESTAMP))")
+        .head()
+        .getTimestamp(0)
+        .toInstant
+
+      writeLastWatermark(checkpointsDir, wm)
+      Some(wm)
+    }
+  }
+
+  private def writeLastWatermark(
+    checkpointDir: Path,
+    watermark: Instant
+  ): Unit = {
+    fileSystem.mkdirs(checkpointDir)
+    val outputStream =
+      fileSystem.create(checkpointDir.resolve("last_watermark"), true)
+    val writer = new PrintWriter(outputStream)
+
+    writer.println(watermark.toString)
+
+    writer.close()
+    outputStream.close()
+  }
+
+  private def readLastWatermark(checkpointDir: Path): Option[Instant] = {
+    if (!fileSystem.exists(checkpointDir))
+      return None
+
+    val reader = new Scanner(
+      fileSystem.open(checkpointDir.resolve("last_watermark"))
+    )
+    val watermark = Instant.parse(reader.nextLine())
+    reader.close()
+    Some(watermark)
+  }
+
   private def computeHash(df: DataFrame): String = {
+    if (df.isEmpty)
+      return ""
     new DataFrameDigestSHA256().digest(df)
   }
 
