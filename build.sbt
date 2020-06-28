@@ -17,7 +17,7 @@ lazy val root = project
   .in(file("."))
   .aggregate(
     kamuCoreManifests,
-    kamuCoreUtils,
+    kamuCoreUtils
   )
   .dependsOn(
     kamuCoreUtils % "compile->compile;test->test",
@@ -26,6 +26,8 @@ lazy val root = project
   .enablePlugins(AutomateHeaderPlugin)
   .settings(
     libraryDependencies ++= Seq(
+      deps.log4jApi,
+      deps.betterFiles,
       deps.sparkCore % "provided",
       deps.sparkSql % "provided",
       deps.geoSpark % "provided",
@@ -34,7 +36,7 @@ lazy val root = project
     commonSettings,
     sparkTestingSettings,
     aggregate in assembly := false,
-    assemblySettings,
+    assemblySettings
   )
 
 lazy val kamuCoreUtils = project
@@ -42,7 +44,8 @@ lazy val kamuCoreUtils = project
   .enablePlugins(AutomateHeaderPlugin)
   .settings(
     libraryDependencies ++= Seq(
-      deps.hadoopCommon,
+      deps.log4jApi,
+      deps.betterFiles,
       deps.scalaTest % "test",
       deps.sparkCore % "provided",
       deps.sparkHive % "provided",
@@ -63,7 +66,7 @@ lazy val kamuCoreManifests = project
   .enablePlugins(AutomateHeaderPlugin)
   .settings(
     libraryDependencies ++= Seq(
-      deps.hadoopCommon,
+      deps.betterFiles,
       deps.pureConfig,
       deps.pureConfigYaml,
       deps.spire
@@ -71,14 +74,15 @@ lazy val kamuCoreManifests = project
     commonSettings
   )
 
-
 //////////////////////////////////////////////////////////////////////////////
 // Dependencies
 //////////////////////////////////////////////////////////////////////////////
 
 lazy val versions = new {
+  //val apacheCommonsCompress = "1.20"
+  val betterFiles = "3.9.1"
   val geoSpark = "1.2.0"
-  val hadoopCommon = "2.6.5"
+  val log4j = "2.13.3"
   val pureConfig = "0.11.1"
   val spark = "2.4.0"
   val sparkTestingBase = s"${spark}_0.11.0"
@@ -87,6 +91,10 @@ lazy val versions = new {
 
 lazy val deps =
   new {
+    val log4jApi = "org.apache.logging.log4j" % "log4j-api" % versions.log4j
+    // File System
+    val betterFiles = "com.github.pathikrit" %% "better-files" % versions.betterFiles
+    //val apacheCommonsCompress = "org.apache.commons" % "commons-compress" % versions.apacheCommonsCompress
     // Configs
     val pureConfig = "com.github.pureconfig" %% "pureconfig" % versions.pureConfig
     val pureConfigYaml = "com.github.pureconfig" %% "pureconfig-yaml" % versions.pureConfig
@@ -96,11 +104,6 @@ lazy val deps =
     // GeoSpark
     val geoSpark = "org.datasyslab" % "geospark" % versions.geoSpark
     val geoSparkSql = "org.datasyslab" % "geospark-sql_2.3" % versions.geoSpark
-    // Hadoop File System
-    val hadoopCommon =
-      ("org.apache.hadoop" % "hadoop-common" % versions.hadoopCommon)
-        .exclude("commons-beanutils", "commons-beanutils")
-        .exclude("commons-beanutils", "commons-beanutils-core")
     // Math
     // TODO: Using older version as it's also used by Spark
     //val spire = "org.typelevel" %% "spire" % versions.spire

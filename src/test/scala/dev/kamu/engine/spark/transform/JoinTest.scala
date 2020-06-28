@@ -8,8 +8,6 @@
 
 package dev.kamu.engine.spark.transform
 
-import java.sql.Timestamp
-
 import dev.kamu.core.utils.test.KamuDataFrameSuite
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.OutputMode

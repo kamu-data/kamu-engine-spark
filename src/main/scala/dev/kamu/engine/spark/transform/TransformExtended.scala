@@ -9,10 +9,12 @@
 package dev.kamu.engine.spark.transform
 
 import java.io.PrintWriter
+import java.nio.file.Path
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.Scanner
 
+import better.files.File
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
@@ -25,7 +27,6 @@ import dev.kamu.core.manifests.infra.{
 import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256}
 import dev.kamu.core.utils.fs._
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.functions.{lit, max}
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
@@ -36,7 +37,6 @@ case class InputSlice(dataFrame: DataFrame, interval: Interval[Instant])
 
 /** Houses logic that eventually should be moved to the coordinator side **/
 class TransformExtended(
-  fileSystem: FileSystem,
   spark: SparkSession,
   systemClock: Clock
 ) extends Transform(spark) {
@@ -203,27 +203,23 @@ class TransformExtended(
 
     df.write.parquet(tmpOutDir.toString)
 
-    val dataFiles = fileSystem
-      .listStatus(tmpOutDir)
-      .filter(_.getPath.getName.endsWith(".snappy.parquet"))
+    val dataFiles = File(tmpOutDir).glob("*.snappy.parquet").toList
 
     if (dataFiles.length != 1)
       throw new RuntimeException(
-        "Unexpected number of files in output directory:\n" + fileSystem
-          .listStatus(tmpOutDir)
-          .map(_.getPath)
+        "Unexpected number of files in output directory:\n" + File(tmpOutDir).list
+          .map(_.path.toString)
           .mkString("\n")
       )
 
-    val dataFile = dataFiles.head.getPath
+    val dataFile = dataFiles.head.path
 
     val targetFile = outDir.resolve(
       systemClock.instant().toString.replaceAll("[:.]", "") + ".snappy.parquet"
     )
 
-    fileSystem.rename(dataFile, targetFile)
-
-    fileSystem.delete(tmpOutDir, true)
+    File(dataFile).moveTo(targetFile)
+    File(tmpOutDir).delete()
 
     targetFile
   }
@@ -250,25 +246,6 @@ class TransformExtended(
       Some(currentWatermarks.flatten.min)
   }
 
-  private def writeLastWatermarks(
-    watermarks: Map[DatasetID, Option[Instant]],
-    checkpointDir: Path
-  ): Unit = {
-    fileSystem.mkdirs(checkpointDir)
-
-    watermarks.filter(_._2.isDefined).foreach {
-      case (id, wm) =>
-        val outputStream =
-          fileSystem.create(checkpointDir.resolve(id.toString), true)
-        val writer = new PrintWriter(outputStream)
-
-        writer.println(wm.get.toString)
-
-        writer.close()
-        outputStream.close()
-    }
-  }
-
   private def readLastWatermarks(
     datasetIDs: Seq[DatasetID],
     checkpointDir: Path
@@ -276,10 +253,10 @@ class TransformExtended(
     datasetIDs
       .map(id => {
         val wmPath = checkpointDir.resolve(id.toString)
-        if (!fileSystem.exists(wmPath)) {
+        if (!File(wmPath).exists) {
           (id, None)
         } else {
-          val reader = new Scanner(fileSystem.open(wmPath))
+          val reader = new Scanner(File(wmPath).newInputStream)
           val watermark = Instant.parse(reader.nextLine())
           reader.close()
           (id, Some(watermark))

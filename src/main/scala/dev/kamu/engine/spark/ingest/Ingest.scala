@@ -9,11 +9,13 @@
 package dev.kamu.engine.spark.ingest
 
 import java.io.PrintWriter
+import java.nio.file.Path
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.Scanner
 import java.util.zip.ZipInputStream
 
+import better.files.File
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.infra.{IngestRequest, IngestResult}
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
@@ -24,7 +26,6 @@ import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256, ZipFiles}
 import dev.kamu.engine.spark.ingest.merge.MergeStrategy
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.LogManager
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.lit
@@ -33,10 +34,7 @@ import org.datasyslab.geospark.formatMapper.shapefileParser.ShapefileReader
 import org.datasyslab.geosparksql.utils.Adapter
 import spire.math.Interval
 
-class Ingest(
-  fileSystem: FileSystem,
-  systemClock: Clock
-) {
+class Ingest(systemClock: Clock) {
   private val corruptRecordColumn = "__corrupt_record__"
   private val logger = LogManager.getLogger(getClass.getName)
 
@@ -139,12 +137,11 @@ class Ingest(
 
     val extractedPath = filePath.getParent.resolve("shapefile")
 
-    val inputStream = fileSystem.open(filePath)
+    val inputStream = File(filePath).newInputStream
     val bzip2Stream = new BZip2CompressorInputStream(inputStream)
     val zipStream = new ZipInputStream(bzip2Stream)
 
     ZipFiles.extractZipFile(
-      fileSystem,
       zipStream,
       extractedPath,
       fmt.subPathRegex
@@ -268,7 +265,7 @@ class Ingest(
 
     // Drop system columns before merging
     val prev = Some(outPath)
-      .filter(fileSystem.exists)
+      .filter(p => File(p).exists)
       .map(
         p =>
           spark.read
@@ -301,27 +298,23 @@ class Ingest(
 
     df.write.parquet(tmpOutDir.toString)
 
-    val dataFiles = fileSystem
-      .listStatus(tmpOutDir)
-      .filter(_.getPath.getName.endsWith(".snappy.parquet"))
+    val dataFiles = File(tmpOutDir).glob("*.snappy.parquet").toList
 
     if (dataFiles.length != 1)
       throw new RuntimeException(
-        "Unexpected number of files in output directory:\n" + fileSystem
-          .listStatus(tmpOutDir)
-          .map(_.getPath)
+        "Unexpected number of files in output directory:\n" + File(tmpOutDir).list
+          .map(_.path.toString)
           .mkString("\n")
       )
 
-    val dataFile = dataFiles.head.getPath
+    val dataFile = dataFiles.head.path
 
     val targetFile = outDir.resolve(
       systemClock.instant().toString.replaceAll("[:.]", "") + ".snappy.parquet"
     )
 
-    fileSystem.rename(dataFile, targetFile)
-
-    fileSystem.delete(tmpOutDir, true)
+    File(dataFile).moveTo(targetFile)
+    File(tmpOutDir).delete()
 
     targetFile
   }
@@ -351,9 +344,8 @@ class Ingest(
     checkpointDir: Path,
     watermark: Instant
   ): Unit = {
-    fileSystem.mkdirs(checkpointDir)
-    val outputStream =
-      fileSystem.create(checkpointDir.resolve("last_watermark"), true)
+    File(checkpointDir).createDirectories()
+    val outputStream = File(checkpointDir.resolve("last_watermark")).newOutputStream
     val writer = new PrintWriter(outputStream)
 
     writer.println(watermark.toString)
@@ -363,11 +355,11 @@ class Ingest(
   }
 
   private def readLastWatermark(checkpointDir: Path): Option[Instant] = {
-    if (!fileSystem.exists(checkpointDir))
+    if (!File(checkpointDir).exists)
       return None
 
     val reader = new Scanner(
-      fileSystem.open(checkpointDir.resolve("last_watermark"))
+      File(checkpointDir.resolve("last_watermark")).newInputStream
     )
     val watermark = Instant.parse(reader.nextLine())
     reader.close()
