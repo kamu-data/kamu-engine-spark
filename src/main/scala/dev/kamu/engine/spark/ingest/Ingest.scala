@@ -9,7 +9,7 @@
 package dev.kamu.engine.spark.ingest
 
 import java.io.PrintWriter
-import java.nio.file.Path
+import java.nio.file.{Path, Paths}
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.Scanner
@@ -43,9 +43,9 @@ class Ingest(systemClock: Clock) {
       spark,
       request.source,
       request.eventTime,
-      request.dataToIngest,
-      request.datasetLayout.checkpointsDir,
-      request.datasetLayout.dataDir,
+      Paths.get(request.ingestPath),
+      Paths.get(request.checkpointsDir),
+      Paths.get(request.dataDir),
       request.datasetVocab.withDefaults()
     )
 

@@ -8,8 +8,7 @@
 
 package dev.kamu.engine.spark.transform
 
-import java.io.PrintWriter
-import java.nio.file.Path
+import java.nio.file.{Path, Paths}
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.Scanner
@@ -28,8 +27,8 @@ import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256}
 import dev.kamu.core.utils.fs._
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
 import org.apache.log4j.LogManager
-import org.apache.spark.sql.functions.{lit, max}
-import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import spire.math.{Empty, Interval}
 import spire.math.interval.{Closed, Open, Unbound}
 
@@ -51,7 +50,8 @@ class TransformExtended(
     val transform =
       yaml.load[TransformKind.SparkSQL](request.source.transform.toConfig)
 
-    val resultLayout = request.datasetLayouts(request.datasetID.toString)
+    val resultCheckpointsDir = Paths.get(request.checkpointsDir)
+    val resultDataDir = Paths.get(request.dataDirs(request.datasetID.toString))
 
     val resultVocab =
       request.datasetVocabs(request.datasetID.toString).withDefaults()
@@ -61,7 +61,7 @@ class TransformExtended(
         spark,
         typedMap(request.inputSlices),
         typedMap(request.datasetVocabs),
-        typedMap(request.datasetLayouts)
+        typedMap(request.dataDirs.mapValues(s => Paths.get(s)))
       )
 
     inputSlices.values.foreach(_.dataFrame.cache())
@@ -73,9 +73,6 @@ class TransformExtended(
     result.cache()
 
     // Prepare metadata
-    val lastWatermark =
-      request.inputSlices.values.map(_.explicitWatermarks.map(_.eventTime))
-
     val block = MetadataBlock(
       prevBlockHash = "",
       systemTime = systemClock.instant(),
@@ -90,7 +87,7 @@ class TransformExtended(
       ),
       outputWatermark = getLastWatermark(
         typedMap(request.inputSlices),
-        resultLayout.checkpointsDir
+        resultCheckpointsDir
       ),
       inputSlices = request.source.inputs.map(i => {
         val slice = inputSlices(i.id)
@@ -117,7 +114,7 @@ class TransformExtended(
       .columnToFront(resultVocab.systemTimeColumn.get)
 
     // Write data
-    writeParquet(resultWithSystemTime, resultLayout.dataDir)
+    writeParquet(resultWithSystemTime, resultDataDir)
 
     // Release memory
     result.unpersist(true)
@@ -130,7 +127,7 @@ class TransformExtended(
     spark: SparkSession,
     inputSlices: Map[DatasetID, InputDataSlice],
     inputVocabs: Map[DatasetID, DatasetVocabulary],
-    inputLayouts: Map[DatasetID, DatasetLayout]
+    inputDataDirs: Map[DatasetID, Path]
   ): Map[DatasetID, InputSlice] = {
     inputSlices.map({
       case (id, slice) =>
@@ -140,7 +137,7 @@ class TransformExtended(
             id,
             slice,
             inputVocabs(id).withDefaults(),
-            inputLayouts(id)
+            inputDataDirs(id)
           )
         (id, inputSlice)
     })
@@ -151,11 +148,11 @@ class TransformExtended(
     id: DatasetID,
     slice: InputDataSlice,
     vocab: DatasetVocabulary,
-    layout: DatasetLayout
+    dataDir: Path
   ): InputSlice = {
     // TODO: use schema from metadata
     val df = spark.read
-      .parquet(layout.dataDir.toString)
+      .parquet(dataDir.toString)
       .transform(sliceData(slice.interval, vocab))
       .drop(vocab.systemTimeColumn.get)
 
