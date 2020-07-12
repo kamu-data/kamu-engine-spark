@@ -20,7 +20,7 @@ class Transform(
   def execute(
     datasetID: DatasetID,
     inputSlices: Map[DatasetID, InputSlice],
-    transform: TransformKind.SparkSQL
+    transform: TransformDef
   ): DataFrame = {
     // Setup inputs
     for ((inputID, slice) <- inputSlices)

@@ -18,26 +18,26 @@ import org.apache.spark.sql.functions.lit
 
 object MergeStrategy {
   def apply(
-    kind: manifests.MergeStrategyKind,
+    kind: manifests.MergeStrategy,
     eventTimeColumn: String,
     eventTime: Timestamp
   ): MergeStrategy = {
     kind match {
-      case _: manifests.MergeStrategyKind.Append =>
+      case _: manifests.MergeStrategy.Append =>
         new AppendMergeStrategy(
           eventTimeColumn,
           eventTime
         )
-      case l: manifests.MergeStrategyKind.Ledger =>
+      case l: manifests.MergeStrategy.Ledger =>
         new LedgerMergeStrategy(
           eventTimeColumn,
           l.primaryKey
         )
-      case ss: manifests.MergeStrategyKind.Snapshot =>
+      case ss: manifests.MergeStrategy.Snapshot =>
         val s = ss.withDefaults()
         new SnapshotMergeStrategy(
           primaryKey = s.primaryKey,
-          compareColumns = s.compareColumns,
+          compareColumns = s.compareColumns.getOrElse(Vector.empty),
           eventTimeColumn = eventTimeColumn,
           eventTime = eventTime,
           observationColumn = s.observationColumn.get,

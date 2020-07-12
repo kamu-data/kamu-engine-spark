@@ -14,6 +14,7 @@ import java.time.Instant
 import java.util.Scanner
 
 import better.files.File
+import com.typesafe.config.ConfigObject
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
@@ -42,13 +43,7 @@ class TransformExtended(
   private val logger = LogManager.getLogger(getClass.getName)
 
   def executeExtended(request: ExecuteQueryRequest): ExecuteQueryResult = {
-    if (request.source.transformEngine != "sparkSQL")
-      throw new RuntimeException(
-        s"Unsupported engine: ${request.source.transformEngine}"
-      )
-
-    val transform =
-      yaml.load[TransformKind.SparkSQL](request.source.transform.toConfig)
+    val transform = loadTransform(request.source.transform)
 
     val resultCheckpointsDir = Paths.get(request.checkpointsDir)
     val resultDataDir = Paths.get(request.dataDirs(request.datasetID.toString))
@@ -74,6 +69,7 @@ class TransformExtended(
 
     // Prepare metadata
     val block = MetadataBlock(
+      blockHash = "",
       prevBlockHash = "",
       systemTime = systemClock.instant(),
       outputSlice = Some(
@@ -89,14 +85,14 @@ class TransformExtended(
         typedMap(request.inputSlices),
         resultCheckpointsDir
       ),
-      inputSlices = request.source.inputs.map(i => {
-        val slice = inputSlices(i.id)
+      inputSlices = Some(request.source.inputs.map(id => {
+        val slice = inputSlices(id)
         DataSlice(
           hash = computeHash(slice.dataFrame),
           interval = slice.interval,
           numRecords = slice.dataFrame.count()
         )
-      })
+      }))
     )
 
     if (result.getColumn(resultVocab.systemTimeColumn.get).isDefined)
@@ -260,6 +256,19 @@ class TransformExtended(
         }
       })
       .toMap
+  }
+
+  private def loadTransform(configObject: ConfigObject): TransformDef = {
+    val raw = yaml.load[TransformDef](configObject.toConfig)
+
+    if (raw.engine != "sparkSQL")
+      throw new RuntimeException(s"Unsupported engine: ${raw.engine}")
+
+    raw.copy(
+      queries =
+        if (raw.query.isDefined) Vector(TransformDef.Query(None, raw.query.get))
+        else raw.queries
+    )
   }
 
   private def computeHash(df: DataFrame): String = {

@@ -25,6 +25,7 @@ import dev.kamu.core.utils.fs._
 import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256, ZipFiles}
 import dev.kamu.engine.spark.ingest.merge.MergeStrategy
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
+import dev.kamu.engine.spark.transform.TransformDef
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.log4j.LogManager
 import org.apache.spark.sql._
@@ -54,7 +55,7 @@ class Ingest(systemClock: Clock) {
 
   private def ingest(
     spark: SparkSession,
-    source: SourceKind.Root,
+    source: DatasetSource.Root,
     eventTime: Option[Instant],
     filePath: Path,
     checkpointsDir: Path,
@@ -69,9 +70,9 @@ class Ingest(systemClock: Clock) {
     spark.sqlContext.clearCache()
 
     val reader = source.read match {
-      case _: ReaderKind.Shapefile =>
+      case _: ReadStep.EsriShapefile =>
         readShapefile _
-      case _: ReaderKind.Geojson =>
+      case _: ReadStep.GeoJson =>
         readGeoJSON _
       case _ =>
         readGeneric _
@@ -87,6 +88,7 @@ class Ingest(systemClock: Clock) {
     result.cache()
 
     val block = MetadataBlock(
+      blockHash = "",
       prevBlockHash = "",
       systemTime = systemClock.instant(),
       outputSlice = Some(
@@ -110,18 +112,25 @@ class Ingest(systemClock: Clock) {
 
   private def readGeneric(
     spark: SparkSession,
-    source: SourceKind.Root,
+    source: DatasetSource.Root,
     filePath: Path
   ): DataFrame = {
-    val fmt = source.read.asGeneric().asInstanceOf[ReaderKind.Generic]
+    val (name, options) = source.read match {
+      case csv: ReadStep.Csv        => ("csv", csv.toSparkReaderOptions)
+      case json: ReadStep.JsonLines => ("json", json.toSparkReaderOptions)
+      case _ =>
+        throw new RuntimeException(s"Not a generic format: ${source.read}")
+    }
+
     val reader = spark.read
 
-    if (fmt.schema.nonEmpty)
-      reader.schema(fmt.schema.mkString(", "))
+    val schema = source.read.schema.getOrElse(Vector.empty)
+    if (schema.nonEmpty)
+      reader.schema(schema.mkString(", "))
 
     reader
-      .format(fmt.name)
-      .options(fmt.options)
+      .format(name)
+      .options(options)
       .option("mode", "PERMISSIVE")
       .option("columnNameOfCorruptRecord", corruptRecordColumn)
       .load(filePath.toString)
@@ -130,10 +139,10 @@ class Ingest(systemClock: Clock) {
   // TODO: This is inefficient
   private def readShapefile(
     spark: SparkSession,
-    source: SourceKind.Root,
+    source: DatasetSource.Root,
     filePath: Path
   ): DataFrame = {
-    val fmt = source.read.asInstanceOf[ReaderKind.Shapefile]
+    val fmt = source.read.asInstanceOf[ReadStep.EsriShapefile]
 
     val extractedPath = filePath.getParent.resolve("shapefile")
 
@@ -144,7 +153,7 @@ class Ingest(systemClock: Clock) {
     ZipFiles.extractZipFile(
       zipStream,
       extractedPath,
-      fmt.subPathRegex
+      fmt.subPath
     )
 
     zipStream.close()
@@ -165,7 +174,7 @@ class Ingest(systemClock: Clock) {
   // TODO: This is very inefficient, should extend GeoSpark to support this
   private def readGeoJSON(
     spark: SparkSession,
-    source: SourceKind.Root,
+    source: DatasetSource.Root,
     filePath: Path
   ): DataFrame = {
     val rdd = GeoJsonReader.readToGeometryRDD(
@@ -202,7 +211,7 @@ class Ingest(systemClock: Clock) {
   }
 
   private def normalizeSchema(
-    source: SourceKind.Root
+    source: DatasetSource.Root
   )(df: DataFrame): DataFrame = {
     if (source.read.schema.nonEmpty)
       return df
@@ -219,17 +228,23 @@ class Ingest(systemClock: Clock) {
     result
   }
 
-  private def preprocess(source: SourceKind.Root)(df: DataFrame): DataFrame = {
+  private def preprocess(
+    source: DatasetSource.Root
+  )(df: DataFrame): DataFrame = {
     if (source.preprocess.isEmpty)
       return df
 
-    if (source.preprocessEngine.get != "sparkSQL")
-      throw new RuntimeException(
-        s"Unsupported engine: ${source.preprocessEngine.get}"
-      )
+    val transformRaw = yaml.load[TransformDef](source.preprocess.get.toConfig)
 
-    val transform =
-      yaml.load[TransformKind.SparkSQL](source.preprocess.get.toConfig)
+    if (transformRaw.engine != "sparkSQL")
+      throw new RuntimeException(s"Unsupported engine: ${transformRaw.engine}")
+
+    val transform = transformRaw.copy(
+      queries =
+        if (transformRaw.query.isDefined)
+          Vector(TransformDef.Query(None, transformRaw.query.get))
+        else transformRaw.queries
+    )
 
     val spark = df.sparkSession
     df.createTempView("input")
@@ -248,7 +263,7 @@ class Ingest(systemClock: Clock) {
   }
 
   private def mergeWithExisting(
-    source: SourceKind.Root,
+    source: DatasetSource.Root,
     eventTime: Option[Instant],
     outPath: Path,
     vocab: DatasetVocabulary
