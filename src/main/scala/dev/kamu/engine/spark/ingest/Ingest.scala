@@ -26,7 +26,6 @@ import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256, ZipFiles}
 import dev.kamu.engine.spark.ingest.merge.MergeStrategy
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
 import dev.kamu.engine.spark.transform.TransformDef
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.log4j.LogManager
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.lit
@@ -147,8 +146,7 @@ class Ingest(systemClock: Clock) {
     val extractedPath = filePath.getParent.resolve("shapefile")
 
     val inputStream = File(filePath).newInputStream
-    val bzip2Stream = new BZip2CompressorInputStream(inputStream)
-    val zipStream = new ZipInputStream(bzip2Stream)
+    val zipStream = new ZipInputStream(inputStream)
 
     ZipFiles.extractZipFile(
       zipStream,
