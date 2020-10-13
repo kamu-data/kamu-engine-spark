@@ -234,7 +234,7 @@ class Ingest(systemClock: Clock) {
 
     val transformRaw = yaml.load[TransformDef](source.preprocess.get.toConfig)
 
-    if (transformRaw.engine != "sparkSQL")
+    if (transformRaw.engine != "spark")
       throw new RuntimeException(s"Unsupported engine: ${transformRaw.engine}")
 
     val transform = transformRaw.copy(

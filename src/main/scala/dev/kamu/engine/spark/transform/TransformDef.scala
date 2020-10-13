@@ -9,7 +9,9 @@
 package dev.kamu.engine.spark.transform
 
 case class TransformDef(
+  kind: String,
   engine: String,
+  version: Option[String],
   /** Processing steps that shape the data */
   queries: Vector[TransformDef.Query] = Vector.empty,
   /** Convenience way to provide a single SQL statement with no alias **/

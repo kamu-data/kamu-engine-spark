@@ -261,7 +261,7 @@ class TransformExtended(
   private def loadTransform(configObject: ConfigObject): TransformDef = {
     val raw = yaml.load[TransformDef](configObject.toConfig)
 
-    if (raw.engine != "sparkSQL")
+    if (raw.engine != "spark")
       throw new RuntimeException(s"Unsupported engine: ${raw.engine}")
 
     raw.copy(
