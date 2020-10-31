@@ -20,14 +20,14 @@ class Transform(
   def execute(
     datasetID: DatasetID,
     inputSlices: Map[DatasetID, InputSlice],
-    transform: TransformDef
+    transform: Transform.Sql
   ): DataFrame = {
     // Setup inputs
     for ((inputID, slice) <- inputSlices)
       slice.dataFrame.createTempView(s"`$inputID`")
 
     // Setup transform
-    for (step <- transform.queries) {
+    for (step <- transform.queries.get) {
       spark
         .sql(step.query)
         .createTempView(s"`${step.alias.getOrElse(datasetID)}`")

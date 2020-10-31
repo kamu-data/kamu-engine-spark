@@ -25,7 +25,6 @@ import dev.kamu.core.utils.fs._
 import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256, ZipFiles}
 import dev.kamu.engine.spark.ingest.merge.MergeStrategy
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
-import dev.kamu.engine.spark.transform.TransformDef
 import org.apache.log4j.LogManager
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.lit
@@ -87,8 +86,9 @@ class Ingest(systemClock: Clock) {
     result.cache()
 
     val block = MetadataBlock(
-      blockHash = "",
-      prevBlockHash = "",
+      blockHash =
+        "0000000000000000000000000000000000000000000000000000000000000000",
+      prevBlockHash = None,
       systemTime = systemClock.instant(),
       outputSlice = Some(
         DataSlice(
@@ -232,22 +232,24 @@ class Ingest(systemClock: Clock) {
     if (source.preprocess.isEmpty)
       return df
 
-    val transformRaw = yaml.load[TransformDef](source.preprocess.get.toConfig)
+    if (source.preprocess.get.engine != "spark")
+      throw new RuntimeException(
+        s"Unsupported engine: ${source.preprocess.get.engine}"
+      )
 
-    if (transformRaw.engine != "spark")
-      throw new RuntimeException(s"Unsupported engine: ${transformRaw.engine}")
+    val transformRaw = source.preprocess.get.asInstanceOf[Transform.Sql]
 
     val transform = transformRaw.copy(
       queries =
         if (transformRaw.query.isDefined)
-          Vector(TransformDef.Query(None, transformRaw.query.get))
+          Some(Vector(SqlQueryStep(None, transformRaw.query.get)))
         else transformRaw.queries
     )
 
     val spark = df.sparkSession
     df.createTempView("input")
 
-    for (step <- transform.queries) {
+    for (step <- transform.queries.get) {
       val tempResult = spark.sql(step.query)
       if (step.alias.isEmpty || step.alias.get == "output")
         return tempResult

@@ -69,8 +69,9 @@ class TransformExtended(
 
     // Prepare metadata
     val block = MetadataBlock(
-      blockHash = "",
-      prevBlockHash = "",
+      blockHash =
+        "0000000000000000000000000000000000000000000000000000000000000000",
+      prevBlockHash = None,
       systemTime = systemClock.instant(),
       outputSlice = Some(
         DataSlice(
@@ -258,16 +259,18 @@ class TransformExtended(
       .toMap
   }
 
-  private def loadTransform(configObject: ConfigObject): TransformDef = {
-    val raw = yaml.load[TransformDef](configObject.toConfig)
-
+  private def loadTransform(
+    raw: dev.kamu.core.manifests.Transform
+  ): Transform.Sql = {
     if (raw.engine != "spark")
       throw new RuntimeException(s"Unsupported engine: ${raw.engine}")
 
-    raw.copy(
+    val sql = raw.asInstanceOf[Transform.Sql]
+
+    sql.copy(
       queries =
-        if (raw.query.isDefined) Vector(TransformDef.Query(None, raw.query.get))
-        else raw.queries
+        if (sql.query.isDefined) Some(Vector(SqlQueryStep(None, sql.query.get)))
+        else sql.queries
     )
   }
 
