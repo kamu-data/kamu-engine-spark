@@ -7,7 +7,10 @@ startYear in ThisBuild := Some(2018)
 licenses in ThisBuild += ("MPL-2.0", new URL(
   "https://www.mozilla.org/en-US/MPL/2.0/"
 ))
-scalaVersion in ThisBuild := "2.11.12"
+scalaVersion in ThisBuild := "2.12.12"
+
+// Needed by GeoSpark SNAPSHOT version
+resolvers in ThisBuild += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
 
 //////////////////////////////////////////////////////////////////////////////
 // Projects
@@ -79,14 +82,13 @@ lazy val kamuCoreManifests = project
 //////////////////////////////////////////////////////////////////////////////
 
 lazy val versions = new {
-  //val apacheCommonsCompress = "1.20"
   val betterFiles = "3.9.1"
-  val geoSpark = "1.2.0"
+  val geoSpark = "1.3.2-SNAPSHOT"
   val log4j = "2.13.3"
   val pureConfig = "0.13.0"
-  val spark = "2.4.0"
-  val sparkTestingBase = s"${spark}_0.11.0"
-  val spire = "0.13.0" // Used by spark too
+  val spark = "3.0.1"
+  val sparkTestingBase = s"${spark}_1.0.0"
+  val spire = "0.17.0"
 }
 
 lazy val deps =
@@ -103,11 +105,9 @@ lazy val deps =
     val sparkSql = "org.apache.spark" %% "spark-sql" % versions.spark
     // GeoSpark
     val geoSpark = "org.datasyslab" % "geospark" % versions.geoSpark
-    val geoSparkSql = "org.datasyslab" % "geospark-sql_2.3" % versions.geoSpark
+    val geoSparkSql = "org.datasyslab" % "geospark-sql_3.0" % versions.geoSpark
     // Math
-    // TODO: Using older version as it's also used by Spark
-    //val spire = "org.typelevel" %% "spire" % versions.spire
-    val spire = "org.spire-math" %% "spire" % versions.spire
+    val spire = "org.typelevel" %% "spire" % versions.spire
     // Test
     val scalaTest = "org.scalatest" %% "scalatest" % "3.0.8"
     val sparkHive = "org.apache.spark" %% "spark-hive" % versions.spark

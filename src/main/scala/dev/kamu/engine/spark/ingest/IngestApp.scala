@@ -19,7 +19,7 @@ import dev.kamu.core.manifests.infra.IngestRequest
 import dev.kamu.core.utils.ManualClock
 import org.apache.log4j.LogManager
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.hadoop.conf.Configuration
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.SparkSession
 import org.datasyslab.geospark.serde.GeoSparkKryoRegistrator
@@ -55,8 +55,8 @@ object IngestApp {
       .set("spark.kryo.registrator", classOf[GeoSparkKryoRegistrator].getName)
   }
 
-  def hadoopConf: org.apache.hadoop.conf.Configuration = {
-    SparkHadoopUtil.get.newConfiguration(sparkConf)
+  def hadoopConf: Configuration = {
+    new Configuration()
   }
 
   def sparkSession: SparkSession = {

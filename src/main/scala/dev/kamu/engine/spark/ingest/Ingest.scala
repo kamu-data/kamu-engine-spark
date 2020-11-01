@@ -170,7 +170,7 @@ class Ingest(systemClock: Clock) {
   }
 
   // TODO: This is very inefficient, should extend GeoSpark to support this
-  private def readGeoJSON(
+  private[ingest] def readGeoJSON(
     spark: SparkSession,
     source: DatasetSource.Root,
     filePath: Path
