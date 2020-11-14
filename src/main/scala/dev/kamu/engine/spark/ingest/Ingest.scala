@@ -36,6 +36,7 @@ import spire.math.Interval
 class Ingest(systemClock: Clock) {
   private val corruptRecordColumn = "__corrupt_record__"
   private val logger = LogManager.getLogger(getClass.getName)
+  private val zero_hash = "0000000000000000000000000000000000000000000000000000000000000000"
 
   def ingest(spark: SparkSession, request: IngestRequest): IngestResult = {
     val block = ingest(
@@ -86,8 +87,7 @@ class Ingest(systemClock: Clock) {
     result.cache()
 
     val block = MetadataBlock(
-      blockHash =
-        "0000000000000000000000000000000000000000000000000000000000000000",
+      blockHash = zero_hash,
       prevBlockHash = None,
       systemTime = systemClock.instant(),
       outputSlice = Some(
@@ -383,7 +383,7 @@ class Ingest(systemClock: Clock) {
 
   private def computeHash(df: DataFrame): String = {
     if (df.isEmpty)
-      return ""
+      return zero_hash
     new DataFrameDigestSHA256().digest(df)
   }
 

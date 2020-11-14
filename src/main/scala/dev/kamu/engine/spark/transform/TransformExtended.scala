@@ -41,6 +41,7 @@ class TransformExtended(
   systemClock: Clock
 ) extends Transform(spark) {
   private val logger = LogManager.getLogger(getClass.getName)
+  private val zero_hash = "0000000000000000000000000000000000000000000000000000000000000000"
 
   def executeExtended(request: ExecuteQueryRequest): ExecuteQueryResult = {
     val transform = loadTransform(request.source.transform)
@@ -69,8 +70,7 @@ class TransformExtended(
 
     // Prepare metadata
     val block = MetadataBlock(
-      blockHash =
-        "0000000000000000000000000000000000000000000000000000000000000000",
+      blockHash = zero_hash,
       prevBlockHash = None,
       systemTime = systemClock.instant(),
       outputSlice = Some(
@@ -276,7 +276,7 @@ class TransformExtended(
 
   private def computeHash(df: DataFrame): String = {
     if (df.isEmpty)
-      return ""
+      return zero_hash
     new DataFrameDigestSHA256().digest(df)
   }
 
