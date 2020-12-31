@@ -36,7 +36,8 @@ import spire.math.Interval
 class Ingest(systemClock: Clock) {
   private val corruptRecordColumn = "__corrupt_record__"
   private val logger = LogManager.getLogger(getClass.getName)
-  private val zero_hash = "0000000000000000000000000000000000000000000000000000000000000000"
+  private val zero_hash =
+    "0000000000000000000000000000000000000000000000000000000000000000"
 
   def ingest(spark: SparkSession, request: IngestRequest): IngestResult = {
     val block = ingest(
@@ -44,8 +45,10 @@ class Ingest(systemClock: Clock) {
       request.source,
       request.eventTime,
       Paths.get(request.ingestPath),
-      Paths.get(request.checkpointsDir),
+      request.prevCheckpointDir.map(Paths.get(_)),
+      Paths.get(request.newCheckpointDir),
       Paths.get(request.dataDir),
+      Paths.get(request.outDataPath),
       request.datasetVocab.withDefaults()
     )
 
@@ -57,7 +60,9 @@ class Ingest(systemClock: Clock) {
     source: DatasetSource.Root,
     eventTime: Option[Instant],
     filePath: Path,
-    checkpointsDir: Path,
+    prevCheckpointDir: Option[Path],
+    newCheckpointDir: Path,
+    dataDir: Path,
     outPath: Path,
     vocab: DatasetVocabulary
   ): MetadataBlock = {
@@ -81,7 +86,7 @@ class Ingest(systemClock: Clock) {
       .transform(checkForErrors)
       .transform(normalizeSchema(source))
       .transform(preprocess(source))
-      .transform(mergeWithExisting(source, eventTime, outPath, vocab))
+      .transform(mergeWithExisting(source, eventTime, dataDir, vocab))
       .transform(postprocess(vocab))
 
     result.cache()
@@ -99,8 +104,12 @@ class Ingest(systemClock: Clock) {
             else Interval.point(systemClock.instant())
         )
       ),
-      outputWatermark = getLastWatermark(result, checkpointsDir, vocab)
+      outputWatermark = getOutputWatermark(result, prevCheckpointDir, vocab)
     )
+
+    if (block.outputWatermark.isDefined) {
+      writeLastWatermark(newCheckpointDir, block.outputWatermark.get)
+    }
 
     writeParquet(result, outPath)
 
@@ -265,7 +274,7 @@ class Ingest(systemClock: Clock) {
   private def mergeWithExisting(
     source: DatasetSource.Root,
     eventTime: Option[Instant],
-    outPath: Path,
+    dataDir: Path,
     vocab: DatasetVocabulary
   )(
     curr: DataFrame
@@ -279,7 +288,7 @@ class Ingest(systemClock: Clock) {
     )
 
     // Drop system columns before merging
-    val prev = Some(outPath)
+    val prev = Some(dataDir)
       .filter(p => File(p).exists)
       .map(
         p =>
@@ -308,7 +317,8 @@ class Ingest(systemClock: Clock) {
       .columnToFront(vocab.systemTimeColumn.get)
   }
 
-  private def writeParquet(df: DataFrame, outDir: Path): Path = {
+  private def writeParquet(df: DataFrame, outPath: Path): Unit = {
+    val outDir = outPath.getParent
     val tmpOutDir = outDir.resolve(".tmp")
 
     df.write.parquet(tmpOutDir.toString)
@@ -324,25 +334,19 @@ class Ingest(systemClock: Clock) {
 
     val dataFile = dataFiles.head.path
 
-    val targetFile = outDir.resolve(
-      systemClock.instant().toString.replaceAll("[:.]", "") + ".snappy.parquet"
-    )
-
-    File(dataFile).moveTo(targetFile)
+    File(dataFile).moveTo(outPath)
     File(tmpOutDir).delete()
-
-    targetFile
   }
 
   // TODO: Out-of-order tolerance
   // TODO: Idle datasets
-  private def getLastWatermark(
+  private def getOutputWatermark(
     result: Dataset[Row],
-    checkpointsDir: Path,
+    prevCheckpointDir: Option[Path],
     vocab: DatasetVocabulary
   ): Option[Instant] = {
     if (result.isEmpty) {
-      readLastWatermark(checkpointsDir)
+      prevCheckpointDir.flatMap(readLastWatermark)
     } else {
       val wm = result
         .selectExpr(s"max(cast(`${vocab.eventTimeColumn.get}` as TIMESTAMP))")
@@ -350,7 +354,6 @@ class Ingest(systemClock: Clock) {
         .getTimestamp(0)
         .toInstant
 
-      writeLastWatermark(checkpointsDir, wm)
       Some(wm)
     }
   }

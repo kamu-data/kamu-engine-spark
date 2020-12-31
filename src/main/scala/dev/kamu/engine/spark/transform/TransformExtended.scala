@@ -8,13 +8,13 @@
 
 package dev.kamu.engine.spark.transform
 
+import java.io.PrintWriter
 import java.nio.file.{Path, Paths}
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.Scanner
 
 import better.files.File
-import com.typesafe.config.ConfigObject
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
@@ -41,13 +41,15 @@ class TransformExtended(
   systemClock: Clock
 ) extends Transform(spark) {
   private val logger = LogManager.getLogger(getClass.getName)
-  private val zero_hash = "0000000000000000000000000000000000000000000000000000000000000000"
+  private val zero_hash =
+    "0000000000000000000000000000000000000000000000000000000000000000"
 
   def executeExtended(request: ExecuteQueryRequest): ExecuteQueryResult = {
     val transform = loadTransform(request.source.transform)
 
-    val resultCheckpointsDir = Paths.get(request.checkpointsDir)
-    val resultDataDir = Paths.get(request.dataDirs(request.datasetID.toString))
+    val prevCheckpointDir = request.prevCheckpointDir.map(Paths.get(_))
+    val newCheckpointDir = Paths.get(request.newCheckpointDir)
+    File(newCheckpointDir).createDirectories()
 
     val resultVocab =
       request.datasetVocabs(request.datasetID.toString).withDefaults()
@@ -56,9 +58,11 @@ class TransformExtended(
       prepareInputSlices(
         spark,
         typedMap(request.inputSlices),
-        typedMap(request.datasetVocabs),
-        typedMap(request.dataDirs.mapValues(s => Paths.get(s)))
+        typedMap(request.datasetVocabs)
       )
+
+    val inputWatermarks =
+      getInputWatermarks(typedMap(request.inputSlices), prevCheckpointDir)
 
     inputSlices.values.foreach(_.dataFrame.cache())
 
@@ -82,10 +86,8 @@ class TransformExtended(
           numRecords = result.count()
         )
       ),
-      outputWatermark = getLastWatermark(
-        typedMap(request.inputSlices),
-        resultCheckpointsDir
-      ),
+      // Output's watermark is a minimum of input watermarks
+      outputWatermark = Some(inputWatermarks.values.min),
       inputSlices = Some(request.source.inputs.map(id => {
         val slice = inputSlices(id)
         DataSlice(
@@ -110,21 +112,25 @@ class TransformExtended(
       )
       .columnToFront(resultVocab.systemTimeColumn.get)
 
+    // Write input watermarks in case they will not be passed during next run
+    for ((datasetID, watermark) <- inputWatermarks) {
+      writeWatermark(datasetID, newCheckpointDir, watermark)
+    }
+
     // Write data
-    writeParquet(resultWithSystemTime, resultDataDir)
+    writeParquet(resultWithSystemTime, Paths.get(request.outDataPath))
 
     // Release memory
     result.unpersist(true)
     inputSlices.values.foreach(_.dataFrame.unpersist(true))
 
-    ExecuteQueryResult(block = block, dataFileName = None)
+    ExecuteQueryResult(block = block)
   }
 
   private def prepareInputSlices(
     spark: SparkSession,
     inputSlices: Map[DatasetID, InputDataSlice],
-    inputVocabs: Map[DatasetID, DatasetVocabulary],
-    inputDataDirs: Map[DatasetID, Path]
+    inputVocabs: Map[DatasetID, DatasetVocabulary]
   ): Map[DatasetID, InputSlice] = {
     inputSlices.map({
       case (id, slice) =>
@@ -133,8 +139,7 @@ class TransformExtended(
             spark,
             id,
             slice,
-            inputVocabs(id).withDefaults(),
-            inputDataDirs(id)
+            inputVocabs(id).withDefaults()
           )
         (id, inputSlice)
     })
@@ -144,10 +149,12 @@ class TransformExtended(
     spark: SparkSession,
     id: DatasetID,
     slice: InputDataSlice,
-    vocab: DatasetVocabulary,
-    dataDir: Path
+    vocab: DatasetVocabulary
   ): InputSlice = {
     // TODO: use schema from metadata
+    // TODO: use individually provided files instead of always reading all files
+    val dataDir = Paths.get(slice.schemaFile).getParent
+
     val df = spark.read
       .parquet(dataDir.toString)
       .transform(sliceData(slice.interval, vocab))
@@ -192,7 +199,8 @@ class TransformExtended(
     }
   }
 
-  private def writeParquet(df: DataFrame, outDir: Path): Path = {
+  private def writeParquet(df: DataFrame, outPath: Path): Unit = {
+    val outDir = outPath.getParent
     val tmpOutDir = outDir.resolve(".tmp")
 
     df.write.parquet(tmpOutDir.toString)
@@ -208,55 +216,54 @@ class TransformExtended(
 
     val dataFile = dataFiles.head.path
 
-    val targetFile = outDir.resolve(
-      systemClock.instant().toString.replaceAll("[:.]", "") + ".snappy.parquet"
-    )
-
-    File(dataFile).moveTo(targetFile)
+    File(dataFile).moveTo(outPath)
     File(tmpOutDir).delete()
-
-    targetFile
   }
 
-  private def getLastWatermark(
+  private def getInputWatermarks(
     inputSlices: Map[DatasetID, InputDataSlice],
-    checkpointDir: Path
-  ): Option[Instant] = {
-    // Computes watermark as minimum of all input watermarks
-
-    val previousWatermarks =
-      readLastWatermarks(inputSlices.keys.toSeq, checkpointDir)
-
-    val currentWatermarks =
-      inputSlices.map {
-        case (id, slice) =>
-          maxOption(slice.explicitWatermarks.map(_.eventTime))
-            .orElse(previousWatermarks(id))
+    prevCheckpointDir: Option[Path]
+  ): Map[DatasetID, Instant] = {
+    val previousWatermarks: Map[DatasetID, Instant] =
+      if (prevCheckpointDir.isDefined) {
+        inputSlices.keys
+          .map(id => (id, readWatermark(id, prevCheckpointDir.get)))
+          .toMap
+      } else {
+        Map.empty
       }
 
-    if (!currentWatermarks.forall(_.isDefined))
-      None
-    else
-      Some(currentWatermarks.flatten.min)
+    inputSlices.map {
+      case (id, slice) =>
+        (
+          id,
+          maxOption(slice.explicitWatermarks.map(_.eventTime))
+            .getOrElse(previousWatermarks(id))
+        )
+    }
   }
 
-  private def readLastWatermarks(
-    datasetIDs: Seq[DatasetID],
+  private def readWatermark(
+    datasetID: DatasetID,
     checkpointDir: Path
-  ): Map[DatasetID, Option[Instant]] = {
-    datasetIDs
-      .map(id => {
-        val wmPath = checkpointDir.resolve(id.toString)
-        if (!File(wmPath).exists) {
-          (id, None)
-        } else {
-          val reader = new Scanner(File(wmPath).newInputStream)
-          val watermark = Instant.parse(reader.nextLine())
-          reader.close()
-          (id, Some(watermark))
-        }
-      })
-      .toMap
+  ): Instant = {
+    val wmPath = checkpointDir.resolve(s"$datasetID.watermark")
+    val reader = new Scanner(File(wmPath).newInputStream)
+    val watermark = Instant.parse(reader.nextLine())
+    reader.close()
+    watermark
+  }
+
+  private def writeWatermark(
+    datasetID: DatasetID,
+    checkpointDir: Path,
+    watermark: Instant
+  ): Unit = {
+    val outputStream = File(checkpointDir.resolve(s"$datasetID.watermark")).newOutputStream
+    val writer = new PrintWriter(outputStream)
+    writer.println(watermark.toString)
+    writer.close()
+    outputStream.close()
   }
 
   private def loadTransform(
