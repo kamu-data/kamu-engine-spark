@@ -84,8 +84,8 @@ class Ingest(systemClock: Clock) {
 
     val result = reader(spark, source, filePath)
       .transform(checkForErrors)
-      .transform(normalizeSchema(source))
       .transform(preprocess(source))
+      .transform(normalizeSchema(source))
       .transform(mergeWithExisting(source, eventTime, dataDir, vocab))
       .transform(postprocess(vocab))
 
