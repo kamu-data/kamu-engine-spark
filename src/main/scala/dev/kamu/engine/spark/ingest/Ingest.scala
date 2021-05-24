@@ -95,15 +95,16 @@ class Ingest(systemClock: Clock) {
       blockHash = zero_hash,
       prevBlockHash = None,
       systemTime = systemClock.instant(),
-      outputSlice = Some(
-        DataSlice(
-          hash = computeHash(result.drop(vocab.systemTimeColumn.get)),
-          numRecords = result.count(),
-          interval =
-            if (result.isEmpty) Interval.empty
-            else Interval.point(systemClock.instant())
-        )
-      ),
+      outputSlice =
+        if (!result.isEmpty)
+          Some(
+            DataSlice(
+              hash = computeHash(result.drop(vocab.systemTimeColumn.get)),
+              numRecords = result.count(),
+              interval = Interval.point(systemClock.instant())
+            )
+          )
+        else None,
       outputWatermark = getOutputWatermark(result, prevCheckpointDir, vocab)
     )
 
