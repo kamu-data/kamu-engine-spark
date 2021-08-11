@@ -45,12 +45,12 @@ object TransformApp {
 
     logger.info(s"Processing dataset: ${request.datasetID}")
 
-    val transform = new TransformExtended(
+    val transform = new Transform(
       getSparkSubSession(sparkSession),
       systemClock
     )
 
-    val result = transform.executeExtended(request)
+    val result = transform.execute(request)
 
     yaml.save(Manifest(result), resultPath)
     logger.info(s"Done processing dataset: ${request.datasetID}")
