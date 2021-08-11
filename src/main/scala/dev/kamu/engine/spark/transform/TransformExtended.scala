@@ -77,15 +77,18 @@ class TransformExtended(
       blockHash = zero_hash,
       prevBlockHash = None,
       systemTime = systemClock.instant(),
-      outputSlice = Some(
-        DataSlice(
-          hash = computeHash(result),
-          interval =
-            if (result.isEmpty) Interval.empty
-            else Interval.point(systemClock.instant()),
-          numRecords = result.count()
-        )
-      ),
+      outputSlice =
+        if (!result.isEmpty)
+          Some(
+            DataSlice(
+              hash = computeHash(result),
+              interval =
+                if (result.isEmpty) Interval.empty
+                else Interval.point(systemClock.instant()),
+              numRecords = result.count()
+            )
+          )
+        else None,
       // Output's watermark is a minimum of input watermarks
       outputWatermark = Some(inputWatermarks.values.min),
       inputSlices = Some(request.source.inputs.map(id => {
