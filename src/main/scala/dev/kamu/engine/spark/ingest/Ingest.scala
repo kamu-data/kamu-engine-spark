@@ -146,7 +146,7 @@ class Ingest(systemClock: Clock) {
   }
 
   // TODO: This is inefficient
-  private def readShapefile(
+  private[ingest] def readShapefile(
     spark: SparkSession,
     source: DatasetSource.Root,
     filePath: Path
@@ -165,6 +165,13 @@ class Ingest(systemClock: Clock) {
     )
 
     zipStream.close()
+
+    // FIXME: due to https://issues.apache.org/jira/browse/SEDONA-18 we need to clean up all extra files
+    val allowedExtensions = Array("shp", "shx", "dbf", "prj")
+    for (f <- extractedPath.toFile.listFiles()) {
+      if (!allowedExtensions.contains(f.getName.split('.').last))
+        f.delete()
+    }
 
     val rdd = ShapefileReader.readToGeometryRDD(
       spark.sparkContext,
