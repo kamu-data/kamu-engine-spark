@@ -1,22 +1,21 @@
-SPARK_VERSION = 3.0.1
-KAMU_VERSION = 0.0.1
-ENGINE_VERSION = 0.10.5
-IMAGE_REPO = kamudata
-IMAGE_SPARK_UBER_TAG = $(SPARK_VERSION)_$(KAMU_VERSION)
+SPARK_IMAGE_VERSION = 3.1.2
+SPARK_IMAGE = bitnami/spark:$(SPARK_IMAGE_VERSION)
+ENGINE_IMAGE_VERSION = 0.11.0-spark_$(SPARK_IMAGE_VERSION)
+ENGINE_IMAGE = kamudata/engine-spark:$(ENGINE_IMAGE_VERSION)
 
 
 .PHONY: image
 image:
 	docker build \
-		--build-arg BASE_IMAGE=$(IMAGE_REPO)/spark-py-uber:$(IMAGE_SPARK_UBER_TAG) \
-		-t $(IMAGE_REPO)/engine-spark:$(ENGINE_VERSION) \
+		--build-arg BASE_IMAGE=$(SPARK_IMAGE) \
+		-t $(ENGINE_IMAGE) \
 		-f image/Dockerfile \
 		.
 
 
 .PHONY: image-push
 image-push:
-	docker push $(IMAGE_REPO)/engine-spark:$(ENGINE_VERSION)
+	docker push $(ENGINE_IMAGE)
 
 
 .PHONY: test-data

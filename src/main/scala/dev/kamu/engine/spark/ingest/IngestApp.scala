@@ -9,7 +9,6 @@
 package dev.kamu.engine.spark.ingest
 
 import java.nio.file.Paths
-
 import better.files.File
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
@@ -20,6 +19,8 @@ import dev.kamu.core.utils.ManualClock
 import org.apache.log4j.LogManager
 import org.apache.spark.SparkConf
 import org.apache.hadoop.conf.Configuration
+import org.apache.sedona.core.serde.SedonaKryoRegistrator
+import org.apache.sedona.sql.utils.SedonaSQLRegistrator
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.SparkSession
 
@@ -49,6 +50,8 @@ object IngestApp {
     new SparkConf()
       .setAppName("transform.streaming")
       .set("spark.sql.session.timeZone", "UTC")
+      .set("spark.serializer", classOf[KryoSerializer].getName)
+      .set("spark.kryo.registrator", classOf[SedonaKryoRegistrator].getName)
   }
 
   def hadoopConf: Configuration = {
@@ -62,6 +65,8 @@ object IngestApp {
   }
 
   def getSparkSubSession(sparkSession: SparkSession): SparkSession = {
-    sparkSession.newSession()
+    val subSession = sparkSession.newSession()
+    SedonaSQLRegistrator.registerAll(subSession)
+    subSession
   }
 }

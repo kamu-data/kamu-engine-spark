@@ -180,10 +180,6 @@ class Ingest(systemClock: Clock) {
 
     Adapter
       .toDf(rdd, spark)
-      .withColumn(
-        "geometry",
-        functions.callUDF("ST_GeomFromWKT", functions.col("geometry"))
-      )
   }
 
   // TODO: This is very inefficient, should extend GeoSpark to support this
@@ -201,10 +197,6 @@ class Ingest(systemClock: Clock) {
 
     Adapter
       .toDf(rdd, spark)
-      .withColumn(
-        "geometry",
-        functions.callUDF("ST_GeomFromWKT", functions.col("geometry"))
-      )
   }
 
   private def checkForErrors(df: DataFrame): DataFrame = {

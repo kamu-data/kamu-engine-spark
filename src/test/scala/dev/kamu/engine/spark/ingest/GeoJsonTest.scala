@@ -11,9 +11,9 @@ package dev.kamu.engine.spark.ingest
 import java.nio.file.Files
 import dev.kamu.core.utils.{ManualClock, Temp}
 import dev.kamu.engine.spark.KamuDataFrameSuite
-import org.scalatest.FunSuite
+import org.scalatest.{FunSuite, Matchers}
 
-class GeoJsonTest extends FunSuite with KamuDataFrameSuite {
+class GeoJsonTest extends FunSuite with KamuDataFrameSuite with Matchers {
   import spark.implicits._
 
   test("feature per line") {
@@ -30,7 +30,16 @@ class GeoJsonTest extends FunSuite with KamuDataFrameSuite {
 
         val ingest = new Ingest(new ManualClock())
         val df = ingest.readGeoJSON(spark, null, filePath)
-        assert(df.count() == 2)
+
+        df.count() shouldEqual 2
+        df.schema.fields
+          .map(f => (f.name, f.dataType.typeName))
+          .toArray shouldEqual Array(
+          ("geometry", "geometry"),
+          ("id", "string"),
+          ("zipcode", "string"),
+          ("name", "string")
+        )
       }
     )
   }
