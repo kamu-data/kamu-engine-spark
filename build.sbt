@@ -1,16 +1,16 @@
 import sbtassembly.AssemblyPlugin.defaultUniversalScript
 
 name := "kamu-engine-spark"
-organization in ThisBuild := "dev.kamu"
-organizationName in ThisBuild := "kamu.dev"
-startYear in ThisBuild := Some(2018)
-licenses in ThisBuild += ("MPL-2.0", new URL(
+ThisBuild / organization := "dev.kamu"
+ThisBuild / organizationName := "kamu.dev"
+ThisBuild / startYear := Some(2018)
+ThisBuild / licenses += ("MPL-2.0", new URL(
   "https://www.mozilla.org/en-US/MPL/2.0/"
 ))
-scalaVersion in ThisBuild := "2.12.12"
+ThisBuild / scalaVersion := "2.12.12"
 
 // Needed by GeoSpark SNAPSHOT version
-resolvers in ThisBuild += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
+ThisBuild / resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
 
 //////////////////////////////////////////////////////////////////////////////
 // Projects
@@ -29,16 +29,21 @@ lazy val root = project
   .enablePlugins(AutomateHeaderPlugin)
   .settings(
     libraryDependencies ++= Seq(
-      deps.log4jApi,
+      deps.slf4jApi,
       deps.betterFiles,
       deps.sparkCore % "provided",
       deps.sparkSql % "provided",
-      deps.geoSpark % "provided",
-      deps.geoSparkSql % "provided"
+      deps.sedona % "provided",
+      deps.sedonaGeotoolsWrapper % "provided",
+      deps.sparkTestingBase % "test"
+    ),
+    dependencyOverrides ++= Seq(
+      // TODO: No f'ing idea why 2.12.2 version is being used why dependencyTree and other tools show only 2.10.0 being used
+      "com.fasterxml.jackson.core" % "jackson-databind" % "2.10.0" % "test"
     ),
     commonSettings,
     sparkTestingSettings,
-    aggregate in assembly := false,
+    assembly / aggregate := false,
     assemblySettings
   )
 
@@ -47,15 +52,9 @@ lazy val kamuCoreUtils = project
   .enablePlugins(AutomateHeaderPlugin)
   .settings(
     libraryDependencies ++= Seq(
-      deps.log4jApi,
+      deps.slf4jApi,
       deps.betterFiles,
-      deps.scalaTest % "test",
-      deps.sparkCore % "provided",
-      deps.sparkHive % "provided",
-      deps.geoSpark % "test",
-      deps.geoSparkSql % "test",
-      deps.sparkTestingBase % "test",
-      deps.sparkHive % "test"
+      deps.scalaTest % "test"
     ),
     commonSettings,
     sparkTestingSettings
@@ -83,17 +82,16 @@ lazy val kamuCoreManifests = project
 
 lazy val versions = new {
   val betterFiles = "3.9.1"
-  val geoSpark = "1.3.2-SNAPSHOT"
-  val log4j = "2.13.3"
+  val sedona = "1.0.1-incubating"
   val pureConfig = "0.13.0"
-  val spark = "3.0.1"
-  val sparkTestingBase = s"${spark}_1.0.0"
+  val spark = "3.1.2"
+  val sparkTestingBase = s"${spark}_1.1.0"
   val spire = "0.17.0"
 }
 
 lazy val deps =
   new {
-    val log4jApi = "org.apache.logging.log4j" % "log4j-api" % versions.log4j
+    val slf4jApi = "org.slf4j" % "slf4j-api" % "1.7.30"
     // File System
     val betterFiles = "com.github.pathikrit" %% "better-files" % versions.betterFiles
     //val apacheCommonsCompress = "org.apache.commons" % "commons-compress" % versions.apacheCommonsCompress
@@ -103,9 +101,9 @@ lazy val deps =
     // Spark
     val sparkCore = "org.apache.spark" %% "spark-core" % versions.spark
     val sparkSql = "org.apache.spark" %% "spark-sql" % versions.spark
-    // GeoSpark
-    val geoSpark = "org.datasyslab" % "geospark" % versions.geoSpark
-    val geoSparkSql = "org.datasyslab" % "geospark-sql_3.0" % versions.geoSpark
+    // Sedona
+    val sedona = "org.apache.sedona" %% "sedona-python-adapter-3.0" % versions.sedona
+    val sedonaGeotoolsWrapper = "org.datasyslab" % "geotools-wrapper" % "geotools-24.1"
     // Math
     val spire = "org.typelevel" %% "spire" % versions.spire
     // Test
@@ -121,8 +119,8 @@ lazy val deps =
 lazy val commonSettings = Seq()
 
 lazy val sparkTestingSettings = Seq(
-  fork in Test := true,
-  parallelExecution in Test := false,
+  Test / fork := true,
+  Test / parallelExecution := false,
   javaOptions ++= Seq(
     "-Xms512M",
     "-Xmx2048M",
@@ -131,6 +129,6 @@ lazy val sparkTestingSettings = Seq(
 )
 
 lazy val assemblySettings = Seq(
-  assemblyJarName in assembly := "engine.spark.jar",
-  test in assembly := {}
+  assembly / assemblyJarName := "engine.spark.jar",
+  assembly / test := {}
 )

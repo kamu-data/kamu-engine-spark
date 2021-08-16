@@ -9,8 +9,8 @@
 package dev.kamu.engine.spark.ingest
 
 import dev.kamu.core.manifests.{DatasetSource, MergeStrategy, ReadStep}
-import dev.kamu.core.utils.test.KamuDataFrameSuite
 import dev.kamu.core.utils.{ManualClock, Temp}
+import dev.kamu.engine.spark.KamuDataFrameSuite
 import org.scalatest.{FunSuite, Matchers}
 
 import java.nio.file.{Files, Path, Paths}

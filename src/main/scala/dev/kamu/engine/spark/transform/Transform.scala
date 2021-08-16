@@ -13,7 +13,6 @@ import java.nio.file.{Path, Paths}
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.Scanner
-
 import better.files.File
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
@@ -24,9 +23,10 @@ import dev.kamu.core.manifests.infra.{
   ExecuteQueryResult,
   InputDataSlice
 }
-import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256}
+import dev.kamu.core.utils.Clock
 import dev.kamu.core.utils.fs._
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
+import dev.kamu.engine.spark.ingest.utils.DataFrameDigestSHA256
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.{DataFrame, SparkSession}

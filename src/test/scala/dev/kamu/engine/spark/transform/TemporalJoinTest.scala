@@ -9,9 +9,8 @@
 package dev.kamu.engine.spark.transform
 
 import java.sql.Timestamp
-
 import com.holdenkarau.spark.testing.DatasetSuiteBase
-import dev.kamu.core.utils.test.KamuDataFrameSuite
+import dev.kamu.engine.spark.KamuDataFrameSuite
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.OutputMode
 import org.scalatest.FunSuite

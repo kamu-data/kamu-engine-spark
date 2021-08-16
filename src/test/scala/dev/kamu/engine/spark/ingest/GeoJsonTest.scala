@@ -9,9 +9,8 @@
 package dev.kamu.engine.spark.ingest
 
 import java.nio.file.Files
-
 import dev.kamu.core.utils.{ManualClock, Temp}
-import dev.kamu.core.utils.test.KamuDataFrameSuite
+import dev.kamu.engine.spark.KamuDataFrameSuite
 import org.scalatest.FunSuite
 
 class GeoJsonTest extends FunSuite with KamuDataFrameSuite {

@@ -22,8 +22,6 @@ import org.apache.spark.SparkConf
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.SparkSession
-import org.datasyslab.geospark.serde.GeoSparkKryoRegistrator
-import org.datasyslab.geosparksql.utils.GeoSparkSQLRegistrator
 
 object IngestApp {
   val requestPath = Paths.get("/opt/engine/in-out/request.yaml")
@@ -51,8 +49,6 @@ object IngestApp {
     new SparkConf()
       .setAppName("transform.streaming")
       .set("spark.sql.session.timeZone", "UTC")
-      .set("spark.serializer", classOf[KryoSerializer].getName)
-      .set("spark.kryo.registrator", classOf[GeoSparkKryoRegistrator].getName)
   }
 
   def hadoopConf: Configuration = {
@@ -66,8 +62,6 @@ object IngestApp {
   }
 
   def getSparkSubSession(sparkSession: SparkSession): SparkSession = {
-    val subSession = sparkSession.newSession()
-    GeoSparkSQLRegistrator.registerAll(subSession)
-    subSession
+    sparkSession.newSession()
   }
 }

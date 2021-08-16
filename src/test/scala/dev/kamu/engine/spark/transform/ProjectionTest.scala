@@ -8,9 +8,9 @@
 
 package dev.kamu.engine.spark.transform
 
-import java.sql.Timestamp
+import dev.kamu.engine.spark.KamuDataFrameSuite
 
-import dev.kamu.core.utils.test.KamuDataFrameSuite
+import java.sql.Timestamp
 import org.scalatest.FunSuite
 
 case class Ticker(

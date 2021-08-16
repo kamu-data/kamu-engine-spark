@@ -9,9 +9,8 @@
 package dev.kamu.engine.spark.ingest
 
 import java.sql.Timestamp
-
 import dev.kamu.core.utils.ManualClock
-import dev.kamu.core.utils.test.KamuDataFrameSuite
+import dev.kamu.engine.spark.KamuDataFrameSuite
 import dev.kamu.engine.spark.ingest.merge.AppendMergeStrategy
 import org.scalatest.FunSuite
 

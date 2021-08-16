@@ -8,9 +8,9 @@
 
 package dev.kamu.engine.spark.ingest
 
-import java.sql.Timestamp
+import dev.kamu.engine.spark.KamuDataFrameSuite
 
-import dev.kamu.core.utils.test.KamuDataFrameSuite
+import java.sql.Timestamp
 import dev.kamu.engine.spark.ingest.merge.SnapshotMergeStrategy
 import org.scalatest.FunSuite
 

@@ -14,7 +14,6 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.Scanner
 import java.util.zip.ZipInputStream
-
 import better.files.File
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.infra.{IngestRequest, IngestResult}
@@ -22,15 +21,16 @@ import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import pureconfig.generic.auto._
 import dev.kamu.core.utils.fs._
-import dev.kamu.core.utils.{Clock, DataFrameDigestSHA256, ZipFiles}
+import dev.kamu.core.utils.{Clock, ZipFiles}
 import dev.kamu.engine.spark.ingest.merge.MergeStrategy
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
+import dev.kamu.engine.spark.ingest.utils.DataFrameDigestSHA256
 import org.apache.log4j.LogManager
+import org.apache.sedona.core.formatMapper.GeoJsonReader
+import org.apache.sedona.core.formatMapper.shapefileParser.ShapefileReader
+import org.apache.sedona.sql.utils.Adapter
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.lit
-import org.datasyslab.geospark.formatMapper.GeoJsonReader
-import org.datasyslab.geospark.formatMapper.shapefileParser.ShapefileReader
-import org.datasyslab.geosparksql.utils.Adapter
 import spire.math.Interval
 
 class Ingest(systemClock: Clock) {
