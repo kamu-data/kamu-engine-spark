@@ -9,7 +9,6 @@
 package dev.kamu.engine.spark.transform
 
 import java.nio.file.Paths
-
 import better.files.File
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
@@ -18,9 +17,7 @@ import dev.kamu.core.manifests.Manifest
 import dev.kamu.core.manifests.infra.ExecuteQueryRequest
 import dev.kamu.core.utils.ManualClock
 import org.apache.log4j.LogManager
-import org.apache.spark.SparkConf
-import org.apache.hadoop.conf.Configuration
-import org.apache.spark.serializer.KryoSerializer
+import org.apache.sedona.sql.utils.SedonaSQLRegistrator
 import org.apache.spark.sql.SparkSession
 
 object TransformApp {
@@ -44,7 +41,7 @@ object TransformApp {
     logger.info(s"Processing dataset: ${request.datasetID}")
 
     val transform = new Transform(
-      getSparkSubSession(sparkSession),
+      sparkSession,
       systemClock
     )
 
@@ -54,23 +51,14 @@ object TransformApp {
     logger.info(s"Done processing dataset: ${request.datasetID}")
   }
 
-  def sparkConf: SparkConf = {
-    new SparkConf()
-      .setAppName("transform.streaming")
-      .set("spark.sql.session.timeZone", "UTC")
-  }
-
-  def hadoopConf: Configuration = {
-    new Configuration()
-  }
-
   def sparkSession: SparkSession = {
-    SparkSession.builder
-      .config(sparkConf)
+    val spark = SparkSession.builder
+      .appName("kamu-transform")
       .getOrCreate()
-  }
 
-  def getSparkSubSession(sparkSession: SparkSession): SparkSession = {
-    sparkSession.newSession()
+    // TODO: For some reason registration of UDTs doesn't work from spark-defaults.conf
+    SedonaSQLRegistrator.registerAll(spark)
+
+    spark
   }
 }

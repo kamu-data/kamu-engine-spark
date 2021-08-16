@@ -15,3 +15,7 @@ This the implementation of the `Engine` contract of [Open Data Fabric](http://op
 - Does not support temporal table joins
   - You might be better off using [Flink-based engine](https://github.com/kamu-data/kamu-engine-flink) for joining and aggregating event streams
 - TODO
+
+## Building
+
+Image build currently requires separately compiling Apache Livy, see [Livy fork](https://github.com/kamu-data/incubator-livy/blob/kamu/KAMU.md).

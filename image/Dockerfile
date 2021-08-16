@@ -14,7 +14,7 @@ RUN apt-get update && \
 
 
 # Logging
-#ADD spark/log4j.properties /opt/spark/conf/log4j.properties
+COPY image/spark.log4j.properties /opt/bitnami/spark/conf/log4j.properties
 
 
 # Sedona
@@ -23,6 +23,18 @@ RUN cd /opt/bitnami/spark/jars && \
     wget "https://repo1.maven.org/maven2/org/datasyslab/geotools-wrapper/geotools-24.1/geotools-wrapper-geotools-24.1.jar" -O "geotools-wrapper-geotools-24.1.jar"
 
 COPY image/spark-defaults.conf /opt/bitnami/spark/conf/spark-defaults.conf
+
+
+# Livy
+# TODO: Waiting for the next Livy release that supports Scala 2.12
+# wget "https://downloads.apache.org/incubator/livy/0.7.1-incubating/apache-livy-0.7.1-incubating-bin.zip" -O "livy.zip"
+COPY image/apache-livy-0.8.0-kamu-bin.zip /opt/livy.zip
+RUN cd /opt && \
+    unzip livy.zip && rm livy.zip && mv apache-livy* livy && \
+    mkdir /opt/livy/logs
+
+COPY image/livy.log4j.properties /opt/livy/conf/log4j.properties
+COPY image/livy.conf /opt/livy/conf/livy.conf
 
 
 #RUN echo "spark.driver.bindAddress 127.0.0.1" >> /opt/spark/conf/spark-defaults.conf

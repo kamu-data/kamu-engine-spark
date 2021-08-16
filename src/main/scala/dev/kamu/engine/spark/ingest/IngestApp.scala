@@ -41,32 +41,19 @@ object IngestApp {
 
     val ingest = new Ingest(systemClock)
 
-    val result = ingest.ingest(getSparkSubSession(sparkSession), request)
+    val result = ingest.ingest(sparkSession, request)
 
     yaml.save(Manifest(result), resultPath)
   }
 
-  def sparkConf: SparkConf = {
-    new SparkConf()
-      .setAppName("transform.streaming")
-      .set("spark.sql.session.timeZone", "UTC")
-      .set("spark.serializer", classOf[KryoSerializer].getName)
-      .set("spark.kryo.registrator", classOf[SedonaKryoRegistrator].getName)
-  }
-
-  def hadoopConf: Configuration = {
-    new Configuration()
-  }
-
   def sparkSession: SparkSession = {
-    SparkSession.builder
-      .config(sparkConf)
+    val spark = SparkSession.builder
+      .appName("kamu-ingest")
       .getOrCreate()
-  }
 
-  def getSparkSubSession(sparkSession: SparkSession): SparkSession = {
-    val subSession = sparkSession.newSession()
-    SedonaSQLRegistrator.registerAll(subSession)
-    subSession
+    // TODO: For some reason registration of UDTs doesn't work from spark-defaults.conf
+    SedonaSQLRegistrator.registerAll(spark)
+
+    spark
   }
 }
