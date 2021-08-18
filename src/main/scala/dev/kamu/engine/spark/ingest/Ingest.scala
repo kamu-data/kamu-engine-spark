@@ -30,7 +30,8 @@ import org.apache.sedona.core.formatMapper.GeoJsonReader
 import org.apache.sedona.core.formatMapper.shapefileParser.ShapefileReader
 import org.apache.sedona.sql.utils.Adapter
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{col, lit, max}
+import org.apache.spark.sql.types.{DataType, DataTypes}
 import spire.math.Interval
 
 class Ingest(systemClock: Clock) {
@@ -340,7 +341,7 @@ class Ingest(systemClock: Clock) {
 
   // TODO: Out-of-order tolerance
   // TODO: Idle datasets
-  private def getOutputWatermark(
+  private[ingest] def getOutputWatermark(
     result: Dataset[Row],
     prevCheckpointDir: Option[Path],
     vocab: DatasetVocabulary
@@ -348,13 +349,27 @@ class Ingest(systemClock: Clock) {
     if (result.isEmpty) {
       prevCheckpointDir.flatMap(readLastWatermark)
     } else {
-      val wm = result
-        .selectExpr(s"max(cast(`${vocab.eventTimeColumn.get}` as TIMESTAMP))")
+      val wm_type = result.schema(vocab.eventTimeColumn.get).dataType
+
+      if (!Array("timestamp", "date").contains(wm_type.typeName))
+        throw new RuntimeException(
+          s"Event time column can only be TIMESTAMP or DATE, got: ${wm_type.typeName}"
+        )
+
+      val wm_col = result.col(vocab.eventTimeColumn.get)
+
+      val has_nulls = result.select("*").where(wm_col.isNull).limit(1)
+      if (has_nulls.count() != 0)
+        throw new RuntimeException(
+          s"Event time column cannot have NULLs, sample row: ${has_nulls.head()}"
+        )
+
+      val max_wm = result
+        .agg(max(wm_col.cast(DataTypes.TimestampType)))
         .head()
         .getTimestamp(0)
-        .toInstant
 
-      Some(wm)
+      Some(max_wm.toInstant)
     }
   }
 
