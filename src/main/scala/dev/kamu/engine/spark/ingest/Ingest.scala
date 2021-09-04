@@ -167,16 +167,24 @@ class Ingest(systemClock: Clock) {
 
     zipStream.close()
 
+    // Shapefiles are sometimes zipped with containing directory, so we check for this case
+    val files = extractedPath.toFile.listFiles()
+    val actualShapefilePath = if (files.length == 1 && files(0).isDirectory) {
+      files(0).toPath
+    } else {
+      extractedPath
+    }
+
     // FIXME: due to https://issues.apache.org/jira/browse/SEDONA-18 we need to clean up all extra files
     val allowedExtensions = Array("shp", "shx", "dbf", "prj")
-    for (f <- extractedPath.toFile.listFiles()) {
+    for (f <- actualShapefilePath.toFile.listFiles()) {
       if (!allowedExtensions.contains(f.getName.split('.').last))
         f.delete()
     }
 
     val rdd = ShapefileReader.readToGeometryRDD(
       spark.sparkContext,
-      extractedPath.toString
+      actualShapefilePath.toString
     )
 
     Adapter
