@@ -44,7 +44,8 @@ lazy val root = project
     commonSettings,
     sparkTestingSettings,
     assembly / aggregate := false,
-    assemblySettings
+    assembly / assemblyJarName := "engine.spark.jar",
+    assembly / test := {}
   )
 
 lazy val kamuCoreUtils = project
@@ -126,9 +127,4 @@ lazy val sparkTestingSettings = Seq(
     "-Xmx2048M",
     "-XX:+CMSClassUnloadingEnabled"
   )
-)
-
-lazy val assemblySettings = Seq(
-  assembly / assemblyJarName := "engine.spark.jar",
-  assembly / test := {}
 )
