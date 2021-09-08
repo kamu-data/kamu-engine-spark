@@ -38,13 +38,22 @@ COPY image/livy.log4j.properties /opt/livy/conf/log4j.properties
 COPY image/livy.conf /opt/livy/conf/livy.conf
 
 
+# Engine
 #RUN echo "spark.driver.bindAddress 127.0.0.1" >> /opt/spark/conf/spark-defaults.conf
 #RUN echo "spark.driver.host 127.0.0.1" >> /opt/spark/conf/spark-defaults.conf
 COPY target/scala-2.12/engine.spark.jar /opt/engine/bin/engine.spark.jar
 
 
+# Adapter
+COPY adapter/target/x86_64-unknown-linux-gnu/release/adapter /opt/engine/bin/adapter
+
+
+EXPOSE 2884/tcp
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/opt/engine/bin/adapter"]
+
 # Restore base image's run config
-WORKDIR /opt/bitnami/spark
-USER 1001
-ENTRYPOINT [ "/opt/bitnami/scripts/spark/entrypoint.sh" ]
-CMD [ "/opt/bitnami/scripts/spark/run.sh" ]
+# WORKDIR /opt/bitnami/spark
+# USER 1001
+# ENTRYPOINT [ "/opt/bitnami/scripts/spark/entrypoint.sh" ]
+# CMD [ "/opt/bitnami/scripts/spark/run.sh" ]

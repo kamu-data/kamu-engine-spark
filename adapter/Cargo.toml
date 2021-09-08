@@ -1,20 +1,14 @@
+cargo-features = ["edition2021"]
+
 [package]
 name = "adapter"
 version = "0.1.0"
-edition = "2018"
-
-[[bin]] # Bin to run the HelloWorld gRPC server
-name = "helloworld-server"
-path = "src/server.rs"
-
-[[bin]] # Bin to run the HelloWorld gRPC client
-name = "helloworld-client"
-path = "src/client.rs"
+edition = "2021"
 
 [dependencies]
-tonic = "0.5"
-prost = "0.8"
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tonic = "*"
+prost = "*"
+tokio = { version = "*", features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]
 serde = { version = "*", features = ["derive"] }
@@ -30,4 +24,4 @@ regex = "*"
 libc = "*"
 
 [build-dependencies]
-tonic-build = "0.5"
+tonic-build = "*"

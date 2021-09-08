@@ -4,13 +4,28 @@ ENGINE_IMAGE_VERSION = 0.12.0-spark_$(SPARK_IMAGE_VERSION)
 ENGINE_IMAGE = kamudata/engine-spark:$(ENGINE_IMAGE_VERSION)
 
 
-.PHONY: image
-image:
+.PHONY: engine-assembly
+engine-assembly:
+	sbt assembly
+
+
+.PHONY: adapter-assembly
+adapter-assembly:
+	cd adapter && \
+	cross build --target x86_64-unknown-linux-gnu --release
+
+
+.PHONY: image-build
+image-build:
 	docker build \
 		--build-arg BASE_IMAGE=$(SPARK_IMAGE) \
 		-t $(ENGINE_IMAGE) \
 		-f image/Dockerfile \
 		.
+
+
+.PHONY: image
+image: engine-assembly adapter-assembly image-build
 
 
 .PHONY: image-push

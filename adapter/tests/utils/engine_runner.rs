@@ -1,23 +1,25 @@
-use std::{
-    process::{Child, Stdio},
-    time::Duration,
-};
+use std::{ops::{Deref, DerefMut}, process::{Child, Stdio}, time::Duration};
 use thiserror::Error;
 
-use super::container_runtime::{ContainerRuntime, RunArgs, TimeoutError};
+use super::container_runtime::{ContainerRuntime, RunArgs};
+
+use kamu_adapter::adapter_client::AdapterClient;
+use kamu_adapter::HelloRequest;
+
+pub mod kamu_adapter {
+    tonic::include_proto!("kamu_adapter");
+}
 
 pub struct Engine {
-    runtime: ContainerRuntime,
-    container_name: String,
-    adapter_host_port: u16,
-    process: Child,
+    client: AdapterClient<tonic::transport::Channel>,
+    _process: OwnedProcess,
 }
 
 impl Engine {
     pub const ENGINE_IMAGE: &'static str = "kamudata/engine-spark:0.12.0-spark_3.1.2";
-    pub const ADAPTER_PORT: u16 = 2474;
+    pub const ADAPTER_PORT: u16 = 2884;
 
-    pub fn new(runtime: ContainerRuntime) -> Result<Self, EngineStartError> {
+    pub async fn new(runtime: ContainerRuntime, timeout: Duration) -> Result<Self, EngineStartError> {
         use rand::Rng;
 
         let mut container_name = "kamu-engine-spark-".to_owned();
@@ -28,47 +30,76 @@ impl Engine {
                 .map(char::from),
         );
 
-        let process = runtime
+        let process = OwnedProcess(runtime
             .run_cmd(RunArgs {
                 image: Self::ENGINE_IMAGE.to_owned(),
                 container_name: Some(container_name.clone()),
+                expose_ports: vec![Self::ADAPTER_PORT],
                 ..RunArgs::default()
             })
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .spawn()
-            .map_err(|e| EngineStartError::from(e))?;
-
-        eprintln!("SPPPPPPPPPPPAAAAAAAAAAAAAAAAWn");
+            .map_err(|e| EngineStartError::from(e))?);
 
         let adapter_host_port = runtime
             .wait_for_host_port(&container_name, Self::ADAPTER_PORT, Duration::from_secs(10))
             .map_err(|e| EngineStartError::from(e))?;
 
-        eprintln!("PORTTTTTTTTTTT");
+        runtime
+            .wait_for_socket(adapter_host_port, timeout).map_err(|e| EngineStartError::from(e))?;
+
+        let client = AdapterClient::connect(
+            format!("http://{}:{}", 
+                runtime.get_runtime_host_addr(), 
+                adapter_host_port)
+        ).await.map_err(|e| EngineStartError::from(e))?;
 
         Ok(Self {
-            runtime,
-            container_name,
-            adapter_host_port,
-            process,
+            client,
+            _process: process,
         })
     }
 
-    pub fn wait_to_start(&self, timeout: Duration) -> Result<(), TimeoutError> {
-        self.runtime
-            .wait_for_socket(self.adapter_host_port, timeout)
-    }
+    pub async fn say_hello(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let request = tonic::Request::new(HelloRequest {
+            name: "Tonic".into(),
+        });
 
-    pub fn has_exited(&mut self) -> Result<bool, std::io::Error> {
-        Ok(self.process.try_wait()?.map(|_| true).unwrap_or(false))
+        let response = self.client.say_hello(request).await?;
+
+        println!("RESPONSE={:?}", response);
+
+        Ok(())
     }
 }
 
-impl Drop for Engine {
+struct OwnedProcess(Child);
+
+impl OwnedProcess {
+    pub fn has_exited(&mut self) -> Result<bool, std::io::Error> {
+        Ok(self.0.try_wait()?.map(|_| true).unwrap_or(false))
+    }
+}
+
+impl Deref for OwnedProcess {
+    type Target = Child;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for OwnedProcess {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Drop for OwnedProcess {
     fn drop(&mut self) {
         unsafe {
-            libc::kill(self.process.id() as i32, libc::SIGTERM);
+            libc::kill(self.0.id() as i32, libc::SIGTERM);
         }
 
         let start = chrono::Utc::now();
@@ -80,7 +111,7 @@ impl Drop for Engine {
             std::thread::sleep(Duration::from_millis(100));
         }
 
-        let _ = self.process.kill();
+        let _ = self.0.kill();
     }
 }
 

@@ -1,24 +1,24 @@
 use tonic::{transport::Server, Request, Response, Status};
 
-use hello_world::greeter_server::{Greeter, GreeterServer};
-use hello_world::{HelloReply, HelloRequest};
+use kamu_adapter::adapter_server::{Adapter, AdapterServer};
+use kamu_adapter::{HelloReply, HelloRequest};
 
-pub mod hello_world {
-    tonic::include_proto!("helloworld");
+pub mod kamu_adapter {
+    tonic::include_proto!("kamu_adapter");
 }
 
 #[derive(Debug, Default)]
-pub struct MyGreeter {}
+pub struct AdapterImpl {}
 
 #[tonic::async_trait]
-impl Greeter for MyGreeter {
+impl Adapter for AdapterImpl {
     async fn say_hello(
         &self,
         request: Request<HelloRequest>,
     ) -> Result<Response<HelloReply>, Status> {
         println!("Got a request: {:?}", request);
 
-        let reply = hello_world::HelloReply {
+        let reply = HelloReply {
             message: format!("Hello {}!", request.into_inner().name).into(),
         };
 
@@ -28,13 +28,13 @@ impl Greeter for MyGreeter {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse()?;
-    let greeter = MyGreeter::default();
-    
+    let addr = "0.0.0.0:2884".parse()?;
+    let adapter = AdapterImpl::default();
+
     println!("RUUUUUUUN");
 
     Server::builder()
-        .add_service(GreeterServer::new(greeter))
+        .add_service(AdapterServer::new(adapter))
         .serve(addr)
         .await?;
 

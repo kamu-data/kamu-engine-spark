@@ -1,4 +1,4 @@
 #![feature(backtrace)]
 
-mod tests;
+mod integration;
 mod utils;
