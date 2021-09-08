@@ -3,12 +3,8 @@ use thiserror::Error;
 
 use super::container_runtime::{ContainerRuntime, RunArgs};
 
-use kamu_adapter::adapter_client::AdapterClient;
-use kamu_adapter::HelloRequest;
-
-pub mod kamu_adapter {
-    tonic::include_proto!("kamu_adapter");
-}
+use super::generated::adapter_client::AdapterClient;
+use super::generated::ExecuteQueryRequest;
 
 pub struct Engine {
     client: AdapterClient<tonic::transport::Channel>,
@@ -62,11 +58,11 @@ impl Engine {
     }
 
     pub async fn say_hello(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let request = tonic::Request::new(HelloRequest {
-            name: "Tonic".into(),
+        let request = tonic::Request::new(ExecuteQueryRequest {
+            flatbuffer: Vec::new(),
         });
 
-        let response = self.client.say_hello(request).await?;
+        let response = self.client.execute_query(request).await?;
 
         println!("RESPONSE={:?}", response);
 

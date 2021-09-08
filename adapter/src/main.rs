@@ -1,30 +1,7 @@
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server};
 
-use kamu_adapter::adapter_server::{Adapter, AdapterServer};
-use kamu_adapter::{HelloReply, HelloRequest};
-
-pub mod kamu_adapter {
-    tonic::include_proto!("kamu_adapter");
-}
-
-#[derive(Debug, Default)]
-pub struct AdapterImpl {}
-
-#[tonic::async_trait]
-impl Adapter for AdapterImpl {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
-        println!("Got a request: {:?}", request);
-
-        let reply = HelloReply {
-            message: format!("Hello {}!", request.into_inner().name).into(),
-        };
-
-        Ok(Response::new(reply))
-    }
-}
+use kamu_engine_spark_adapter::generated::adapter_server::AdapterServer;
+use kamu_engine_spark_adapter::AdapterImpl;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
