@@ -10,6 +10,12 @@ tonic = "*"
 prost = "*"
 tokio = { version = "*", features = ["macros", "rt-multi-thread"] }
 
+# Tracing / logging / telemetry
+tracing = "*"  
+tracing-subscriber = "*"
+tracing-log = "*"
+tracing-bunyan-formatter = "*"
+
 [dev-dependencies]
 serde = { version = "*", features = ["derive"] }
 serde_with = "*"
