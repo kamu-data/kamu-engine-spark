@@ -1,7 +1,7 @@
-use tonic::{transport::Server};
+use tonic::transport::Server;
 
-use kamu_engine_spark_adapter::generated::adapter_server::AdapterServer;
-use kamu_engine_spark_adapter::AdapterImpl;
+use kamu_engine_spark_adapter::SparkODFAdapter;
+use opendatafabric::engine::generated::engine_server::EngineServer;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -18,12 +18,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("kamu-engine-spark ODF adapter (v{})", VERSION);
 
     let addr = "0.0.0.0:2884".parse()?;
-    let adapter = AdapterImpl::default();
+    let adapter = SparkODFAdapter::default();
 
     tracing::info!("gRPC listening on: http://{}", addr);
 
     Server::builder()
-        .add_service(AdapterServer::new(adapter))
+        .add_service(EngineServer::new(adapter))
         .serve(addr)
         .await?;
 

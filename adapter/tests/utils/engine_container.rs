@@ -1,21 +1,24 @@
-use std::{ops::{Deref, DerefMut}, process::{Child, Stdio}, time::Duration};
+use opendatafabric::engine::EngineClient;
+use std::{
+    ops::{Deref, DerefMut},
+    process::{Child, Stdio},
+    time::Duration,
+};
 use thiserror::Error;
 
-use super::container_runtime::{ContainerRuntime, RunArgs};
+use container_runtime::{ContainerRuntime, RunArgs};
 
-use super::generated::adapter_client::AdapterClient;
-use super::generated::ExecuteQueryRequest;
-
-pub struct Engine {
-    client: AdapterClient<tonic::transport::Channel>,
+pub struct EngineContainer {
+    runtime: ContainerRuntime,
+    container_name: String,
     _process: OwnedProcess,
 }
 
-impl Engine {
+impl EngineContainer {
     pub const ENGINE_IMAGE: &'static str = "kamudata/engine-spark:0.12.0-spark_3.1.2";
     pub const ADAPTER_PORT: u16 = 2884;
 
-    pub async fn new(runtime: ContainerRuntime, timeout: Duration) -> Result<Self, EngineStartError> {
+    pub fn new(runtime: ContainerRuntime, timeout: Duration) -> Result<Self, EngineStartError> {
         use rand::Rng;
 
         let mut container_name = "kamu-engine-spark-".to_owned();
@@ -26,47 +29,43 @@ impl Engine {
                 .map(char::from),
         );
 
-        let process = OwnedProcess(runtime
-            .run_cmd(RunArgs {
-                image: Self::ENGINE_IMAGE.to_owned(),
-                container_name: Some(container_name.clone()),
-                expose_ports: vec![Self::ADAPTER_PORT],
-                ..RunArgs::default()
-            })
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(|e| EngineStartError::from(e))?);
+        let process = OwnedProcess(
+            runtime
+                .run_cmd(RunArgs {
+                    image: Self::ENGINE_IMAGE.to_owned(),
+                    container_name: Some(container_name.clone()),
+                    expose_ports: vec![Self::ADAPTER_PORT],
+                    ..RunArgs::default()
+                })
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .map_err(|e| EngineStartError::from(e))?,
+        );
 
         let adapter_host_port = runtime
             .wait_for_host_port(&container_name, Self::ADAPTER_PORT, Duration::from_secs(10))
             .map_err(|e| EngineStartError::from(e))?;
 
         runtime
-            .wait_for_socket(adapter_host_port, timeout).map_err(|e| EngineStartError::from(e))?;
-
-        let client = AdapterClient::connect(
-            format!("http://{}:{}", 
-                runtime.get_runtime_host_addr(), 
-                adapter_host_port)
-        ).await.map_err(|e| EngineStartError::from(e))?;
+            .wait_for_socket(adapter_host_port, timeout)
+            .map_err(|e| EngineStartError::from(e))?;
 
         Ok(Self {
-            client,
+            runtime,
+            container_name,
             _process: process,
         })
     }
 
-    pub async fn say_hello(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let request = tonic::Request::new(ExecuteQueryRequest {
-            flatbuffer: Vec::new(),
-        });
-
-        let response = self.client.execute_query(request).await?;
-
-        println!("RESPONSE={:?}", response);
-
-        Ok(())
+    pub async fn get_client(&self) -> Result<EngineClient, tonic::transport::Error> {
+        EngineClient::connect(
+            &self.runtime.get_runtime_host_addr(),
+            self.runtime
+                .get_host_port(&self.container_name, Self::ADAPTER_PORT)
+                .unwrap(),
+        )
+        .await
     }
 }
 
