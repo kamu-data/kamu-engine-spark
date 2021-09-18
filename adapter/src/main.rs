@@ -15,12 +15,16 @@ const DEFAULT_LOGGING_CONFIG: &str = "info";
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_logging();
 
-    tracing::info!("kamu-engine-spark ODF adapter (v{})", VERSION);
+    let addr = "0.0.0.0:2884";
 
-    let addr = "0.0.0.0:2884".parse()?;
+    tracing::info!(
+        message = "Starting Spark engine ODF adapter",
+        version = VERSION,
+        addr = addr,
+    );
+
+    let addr = addr.parse()?;
     let adapter = SparkODFAdapter::default();
-
-    tracing::info!("gRPC listening on: http://{}", addr);
 
     Server::builder()
         .add_service(EngineServer::new(adapter))
