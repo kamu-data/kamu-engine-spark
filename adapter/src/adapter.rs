@@ -1,60 +1,105 @@
-use opendatafabric::serde::{EngineProtocolDeserializer, EngineProtocolSerializer};
-use opendatafabric::ExecuteQueryResponse;
-use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Request, Response, Status};
+use std::path::PathBuf;
 
-use opendatafabric::engine::generated::engine_server::Engine as EngineGRPC;
-use opendatafabric::engine::generated::{
-    ExecuteQueryRequest as ExecuteQueryRequestGRPC,
-    ExecuteQueryResponse as ExecuteQueryResponseGRPC,
+use opendatafabric::{
+    serde::{yaml::YamlEngineProtocol, EngineProtocolDeserializer, EngineProtocolSerializer},
+    ExecuteQueryRequest, ExecuteQueryResponse, ExecuteQueryResponseInternalError,
 };
-use opendatafabric::serde::flatbuffers::FlatbuffersEngineProtocol;
-use tracing::info;
+use tracing::{error, info};
 
-#[derive(Debug, Default)]
-pub struct SparkODFAdapter {}
+use crate::spark::forward_to_logging;
 
-#[tonic::async_trait]
-impl EngineGRPC for SparkODFAdapter {
-    type ExecuteQueryStream = ReceiverStream<Result<ExecuteQueryResponseGRPC, Status>>;
+// use crate::spark::{SparkMaster, SparkWorker};
 
-    async fn execute_query(
+/////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug)]
+pub struct SparkODFAdapter {
+    // spark_master: SparkMaster,
+// spark_worker: SparkWorker,
+}
+
+impl SparkODFAdapter {
+    pub async fn new() -> Self {
+        /*
+        let spark_master = SparkMaster::start().await.unwrap();
+        let spark_worker = SparkWorker::start().await.unwrap();
+        Self {
+            spark_master,
+            spark_worker,
+        }
+        */
+        Self {}
+    }
+
+    pub async fn execute_query_impl(
         &self,
-        request_grpc: Request<ExecuteQueryRequestGRPC>,
-    ) -> Result<Response<Self::ExecuteQueryStream>, Status> {
-        let span = tracing::span!(tracing::Level::INFO, "execute_query");
-        let _enter = span.enter();
+        request: ExecuteQueryRequest,
+    ) -> Result<ExecuteQueryResponse, Box<dyn std::error::Error>> {
+        let in_out_dir = PathBuf::from("/opt/engine/in-out");
+        let _ = std::fs::remove_dir_all(&in_out_dir);
+        let _ = std::fs::create_dir_all(&in_out_dir);
 
-        let request = FlatbuffersEngineProtocol
-            .read_execute_query_request(&request_grpc.get_ref().flatbuffer)
-            .unwrap();
+        {
+            let request_path = PathBuf::from("/opt/engine/in-out/request.yaml");
+            let data = YamlEngineProtocol.write_execute_query_request(&request)?;
+            std::fs::write(request_path, data)?;
+        }
 
-        info!(message = "Got request", request = ?request);
+        let mut cmd = tokio::process::Command::new("/opt/bitnami/spark/bin/spark-submit");
+        cmd.current_dir("/opt/bitnami/spark")
+            .args(&[
+                // "--master",
+                // "spark://127.0.0.1:7077",
+                "--master=local[4]",
+                "--driver-memory=2g",
+                "--conf",
+                "spark.ui.enabled=false",
+                "--class",
+                "dev.kamu.engine.spark.transform.TransformApp",
+                "/opt/engine/bin/engine.spark.jar",
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
 
-        let (tx, rx) = tokio::sync::mpsc::channel(1);
+        info!(message = "Submitting Spark job", cmd = ?cmd);
 
-        tokio::spawn(async move {
-            let responses = [
-                ExecuteQueryResponse::Progress,
-                ExecuteQueryResponse::Progress,
-                ExecuteQueryResponse::Error,
-            ];
+        let mut process = cmd.spawn()?;
 
-            for response in responses {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let stdout_task = forward_to_logging(process.stdout.take().unwrap(), "submit", "stdout");
+        let stderr_task = forward_to_logging(process.stderr.take().unwrap(), "submit", "stderr");
 
-                let response_fb = FlatbuffersEngineProtocol
-                    .write_execute_query_response(&response)
-                    .unwrap();
+        let exit_status = process.wait().await?;
+        stdout_task.await?;
+        stderr_task.await?;
 
-                let response_grpc = ExecuteQueryResponseGRPC {
-                    flatbuffer: response_fb.collapse_vec(),
-                };
+        let response_path = PathBuf::from("/opt/engine/in-out/response.yaml");
 
-                tx.send(Ok(response_grpc)).await.unwrap();
-            }
-        });
+        if response_path.exists() {
+            let data = std::fs::read_to_string(&response_path)?;
+            Ok(YamlEngineProtocol.read_execute_query_response(data.as_bytes())?)
+        } else if !exit_status.success() {
+            error!(
+                message = "Job exited with non-zero code",
+                code = exit_status.code().unwrap(),
+            );
 
-        Ok(Response::new(ReceiverStream::new(rx)))
+            Ok(ExecuteQueryResponse::InternalError(
+                ExecuteQueryResponseInternalError {
+                    message: format!(
+                        "Engine exited with non-zero status: {}",
+                        exit_status.code().unwrap()
+                    ),
+                    backtrace: None,
+                },
+            ))
+        } else {
+            Ok(ExecuteQueryResponse::InternalError(
+                ExecuteQueryResponseInternalError {
+                    message: format!("Engine did not write the response file"),
+                    backtrace: None,
+                },
+            ))
+        }
     }
 }

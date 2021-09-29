@@ -8,22 +8,20 @@ edition = "2021"
 opendatafabric = { git = "https://github.com/kamu-data/kamu-cli", branch = "odf_engine_adapter" }
 # opendatafabric = { path = "../../kamu-cli/opendatafabric" }
 
-tonic = "*"
+# RPC
+libc = "*"
 prost = "*"
-tokio = { version = "*", features = ["macros", "rt-multi-thread"] }
+tonic = "*"
+tokio = { version = "*", features = ["macros", "rt-multi-thread", "process"] }
 tokio-stream = "*"
+
+# Serialization
+serde = { version = "*", features = ["derive"] }
+serde_with = "*"
+serde_yaml = "*"
 
 # Tracing / logging / telemetry
 tracing = "*"  
 tracing-subscriber = "*"
 tracing-log = "*"
 tracing-bunyan-formatter = "*"
-
-[dev-dependencies]
-container-runtime = { git = "https://github.com/kamu-data/kamu-cli", branch = "odf_engine_adapter" }
-# container-runtime = { path = "../../kamu-cli/utils/container-runtime" }
-
-chrono = { version = "*", features = ["serde"] }
-libc = "*"
-rand = "^0.8"
-thiserror = "*"  # Structured error derivations

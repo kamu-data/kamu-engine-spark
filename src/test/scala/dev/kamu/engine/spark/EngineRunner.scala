@@ -12,12 +12,7 @@ import java.nio.file.{Path, Paths}
 import better.files.File
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests.Manifest
-import dev.kamu.core.manifests.infra.{
-  ExecuteQueryRequest,
-  ExecuteQueryResult,
-  IngestRequest,
-  IngestResult
-}
+import dev.kamu.core.manifests.infra.{IngestRequest, IngestResult}
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import dev.kamu.core.utils.Temp

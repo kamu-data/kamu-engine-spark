@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use tonic::transport::Server;
 
-use kamu_engine_spark_adapter::SparkODFAdapter;
+use kamu_engine_spark_adapter::adapter::SparkODFAdapter;
+use kamu_engine_spark_adapter::grpc::EngineGRPCImpl;
 use opendatafabric::engine::generated::engine_server::EngineServer;
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -24,10 +27,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let addr = addr.parse()?;
-    let adapter = SparkODFAdapter::default();
+    let adapter = Arc::new(SparkODFAdapter::new().await);
+    let engine_grpc = EngineGRPCImpl::new(adapter);
 
     Server::builder()
-        .add_service(EngineServer::new(adapter))
+        .add_service(EngineServer::new(engine_grpc))
         .serve(addr)
         .await?;
 

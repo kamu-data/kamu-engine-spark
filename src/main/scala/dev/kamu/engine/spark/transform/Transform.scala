@@ -9,7 +9,7 @@
 package dev.kamu.engine.spark.transform
 
 import java.io.PrintWriter
-import java.nio.file.{Path, Paths}
+import java.nio.file.Path
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.Scanner
@@ -18,10 +18,10 @@ import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests.infra.{
+import dev.kamu.core.manifests.{
   ExecuteQueryRequest,
-  ExecuteQueryResult,
-  InputDataSlice
+  ExecuteQueryResponse,
+  QueryInput
 }
 import dev.kamu.core.utils.Clock
 import dev.kamu.core.utils.fs._
@@ -44,25 +44,23 @@ class Transform(
   private val zero_hash =
     "0000000000000000000000000000000000000000000000000000000000000000"
 
-  def execute(request: ExecuteQueryRequest): ExecuteQueryResult = {
-    val transform = loadTransform(request.source.transform)
+  def execute(
+    request: ExecuteQueryRequest
+  ): ExecuteQueryResponse = {
+    val transform = loadTransform(request.transform)
 
-    val prevCheckpointDir = request.prevCheckpointDir.map(Paths.get(_))
-    val newCheckpointDir = Paths.get(request.newCheckpointDir)
-    File(newCheckpointDir).createDirectories()
+    File(request.newCheckpointDir).createDirectories()
 
-    val resultVocab =
-      request.datasetVocabs(request.datasetID.toString).withDefaults()
+    val resultVocab = request.vocab.withDefaults()
 
     val inputSlices =
       prepareInputSlices(
         spark,
-        typedMap(request.inputSlices),
-        typedMap(request.datasetVocabs)
+        request.inputs
       )
 
     val inputWatermarks =
-      getInputWatermarks(typedMap(request.inputSlices), prevCheckpointDir)
+      getInputWatermarks(request.inputs, request.prevCheckpointDir)
 
     inputSlices.values.foreach(_.dataFrame.cache())
 
@@ -104,8 +102,8 @@ class Transform(
         else None,
       // Output's watermark is a minimum of input watermarks
       outputWatermark = Some(inputWatermarks.values.min),
-      inputSlices = Some(request.source.inputs.map(id => {
-        val slice = inputSlices(id)
+      inputSlices = Some(request.inputs.map(input => {
+        val slice = inputSlices(input.datasetID)
         DataSlice(
           hash = computeHash(slice.dataFrame),
           interval = slice.interval,
@@ -130,56 +128,48 @@ class Transform(
 
     // Write input watermarks in case they will not be passed during next run
     for ((datasetID, watermark) <- inputWatermarks) {
-      writeWatermark(datasetID, newCheckpointDir, watermark)
+      writeWatermark(datasetID, request.newCheckpointDir, watermark)
     }
 
     // Write data
     if (!result.isEmpty)
-      writeParquet(resultWithSystemTime, Paths.get(request.outDataPath))
+      writeParquet(resultWithSystemTime, request.outDataPath)
 
     // Release memory
     result.unpersist(true)
     inputSlices.values.foreach(_.dataFrame.unpersist(true))
 
-    ExecuteQueryResult(block = block)
+    ExecuteQueryResponse.Success(metadataBlock = block)
   }
 
   private def prepareInputSlices(
     spark: SparkSession,
-    inputSlices: Map[DatasetID, InputDataSlice],
-    inputVocabs: Map[DatasetID, DatasetVocabulary]
+    inputs: Vector[QueryInput]
   ): Map[DatasetID, InputSlice] = {
-    inputSlices.map({
-      case (id, slice) =>
-        val inputSlice =
-          prepareInputSlice(
-            spark,
-            id,
-            slice,
-            inputVocabs(id).withDefaults()
-          )
-        (id, inputSlice)
-    })
+    inputs
+      .map(input => {
+        (input.datasetID, prepareInputSlice(spark, input))
+      })
+      .toMap
   }
 
   private def prepareInputSlice(
     spark: SparkSession,
-    id: DatasetID,
-    slice: InputDataSlice,
-    vocab: DatasetVocabulary
+    input: QueryInput
   ): InputSlice = {
     // TODO: use schema from metadata
     // TODO: use individually provided files instead of always reading all files
-    val dataDir = Paths.get(slice.schemaFile).getParent
+    val dataDir = input.schemaFile.getParent
+    val vocab = input.vocab.withDefaults()
 
     val df = spark.read
       .parquet(dataDir.toString)
-      .transform(sliceData(slice.interval, vocab))
+      .transform(sliceData(input.interval, vocab))
       .drop(vocab.systemTimeColumn.get)
 
     InputSlice(
       dataFrame = df,
-      interval = slice.interval
+      interval = input.interval
     )
   }
 
@@ -238,26 +228,33 @@ class Transform(
   }
 
   private def getInputWatermarks(
-    inputSlices: Map[DatasetID, InputDataSlice],
+    inputs: Vector[QueryInput],
     prevCheckpointDir: Option[Path]
   ): Map[DatasetID, Instant] = {
     val previousWatermarks: Map[DatasetID, Instant] =
       if (prevCheckpointDir.isDefined) {
-        inputSlices.keys
-          .map(id => (id, readWatermark(id, prevCheckpointDir.get)))
+        inputs
+          .map(
+            input =>
+              (
+                input.datasetID,
+                readWatermark(input.datasetID, prevCheckpointDir.get)
+              )
+          )
           .toMap
       } else {
         Map.empty
       }
 
-    inputSlices.map {
-      case (id, slice) =>
+    inputs
+      .map(input => {
         (
-          id,
-          maxOption(slice.explicitWatermarks.map(_.eventTime))
-            .getOrElse(previousWatermarks(id))
+          input.datasetID,
+          maxOption(input.explicitWatermarks.map(_.eventTime))
+            .getOrElse(previousWatermarks(input.datasetID))
         )
-    }
+      })
+      .toMap
   }
 
   private def readWatermark(
