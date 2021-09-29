@@ -11,8 +11,8 @@ package dev.kamu.engine.spark
 import java.nio.file.{Path, Paths}
 import better.files.File
 import pureconfig.generic.auto._
-import dev.kamu.core.manifests.Manifest
-import dev.kamu.core.manifests.infra.{IngestRequest, IngestResult}
+import dev.kamu.core.manifests.ExecuteQueryResponse
+import dev.kamu.core.manifests.infra.IngestRequest
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import dev.kamu.core.utils.Temp
@@ -20,6 +20,8 @@ import dev.kamu.core.utils.fs._
 import dev.kamu.core.utils.{DockerClient, DockerRunArgs}
 import org.slf4j.LoggerFactory
 import pureconfig.{ConfigReader, ConfigWriter, Derivation}
+
+import scala.reflect.ClassTag
 
 class EngineRunner(
   dockerClient: DockerClient,
@@ -30,21 +32,21 @@ class EngineRunner(
   def ingest(
     request: IngestRequest,
     workspaceDir: Path
-  ): IngestResult = {
-    submit[IngestRequest, IngestResult](
+  ): ExecuteQueryResponse.Success = {
+    submit[IngestRequest, ExecuteQueryResponse](
       request,
       workspaceDir,
       "dev.kamu.engine.spark.ingest.IngestApp"
-    )
+    ).asInstanceOf[ExecuteQueryResponse.Success]
   }
 
-  def submit[Req, Resp](
+  def submit[Req: ClassTag, Resp: ClassTag](
     request: Req,
     workspaceDir: Path,
     appClass: String
   )(
-    implicit dreq: Derivation[ConfigWriter[Manifest[Req]]],
-    dresp: Derivation[ConfigReader[Manifest[Resp]]]
+    implicit dreq: Derivation[ConfigWriter[Req]],
+    dresp: Derivation[ConfigReader[Resp]]
   ): Resp = {
     val engineJar = Paths.get("target", "scala-2.12", "engine.spark.jar")
 
@@ -55,7 +57,7 @@ class EngineRunner(
     val engineJarInContainer = Paths.get("/opt/engine/bin/engine.spark.jar")
 
     Temp.withRandomTempDir("kamu-inout-") { inOutDir =>
-      yaml.save(Manifest(request), inOutDir.resolve("request.yaml"))
+      yaml.save(request, inOutDir.resolve("request.yaml"))
 
       try {
 
@@ -100,8 +102,7 @@ class EngineRunner(
       }
 
       yaml
-        .load[Manifest[Resp]](inOutDir.resolve("result.yaml"))
-        .content
+        .load[Resp](inOutDir.resolve("response.yaml"))
     }
   }
 }

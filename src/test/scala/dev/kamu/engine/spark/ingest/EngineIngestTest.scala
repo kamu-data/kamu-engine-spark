@@ -59,6 +59,15 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |  read:
              |    kind: csv
              |    header: true
+             |  preprocess:
+             |    kind: sql
+             |    engine: spark
+             |    query: |
+             |      select
+             |        cast(date as DATE) as date,
+             |        city,
+             |        cast(population as INT) as population
+             |      from input
              |  merge:
              |    kind: ledger
              |    primaryKey:
@@ -76,9 +85,9 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.block.outputSlice.get.numRecords shouldEqual 2
-        response.block.outputSlice.get.hash shouldEqual "ec3c5e8abbefeadff9b0e3897e3c3c969d9e8de734c06d08f1b0296c194ca58f"
-        response.block.outputWatermark shouldEqual Some(
+        response.metadataBlock.outputSlice.get.numRecords shouldEqual 2
+        response.metadataBlock.outputSlice.get.hash shouldEqual "ec3c5e8abbefeadff9b0e3897e3c3c969d9e8de734c06d08f1b0296c194ca58f"
+        response.metadataBlock.outputWatermark shouldEqual Some(
           Instant.parse("2020-01-01T00:00:00Z")
         )
       }
@@ -126,8 +135,8 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.block.outputSlice.get.numRecords shouldEqual 263
-        response.block.outputSlice.get.hash shouldEqual "265d533419048f85c73e5e37844c1088b03bfdb18f6873ed19f2de13abed72b3"
+        response.metadataBlock.outputSlice.get.numRecords shouldEqual 263
+        response.metadataBlock.outputSlice.get.hash shouldEqual "265d533419048f85c73e5e37844c1088b03bfdb18f6873ed19f2de13abed72b3"
 
         val df = spark.read.parquet(outputPath.toString)
 
@@ -193,8 +202,8 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.block.outputSlice.get.numRecords shouldEqual 2
-        response.block.outputSlice.get.hash shouldEqual "34c9c4bd5bdfd5d556f3cae3b72187fc7173b969201900d4ab00e93ae10af6bb"
+        response.metadataBlock.outputSlice.get.numRecords shouldEqual 2
+        response.metadataBlock.outputSlice.get.hash shouldEqual "34c9c4bd5bdfd5d556f3cae3b72187fc7173b969201900d4ab00e93ae10af6bb"
 
         val df = spark.read.parquet(outputPath.toString)
 

@@ -16,7 +16,7 @@ import java.util.Scanner
 import java.util.zip.ZipInputStream
 import better.files.File
 import dev.kamu.core.manifests._
-import dev.kamu.core.manifests.infra.{IngestRequest, IngestResult}
+import dev.kamu.core.manifests.infra.IngestRequest
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import pureconfig.generic.auto._
@@ -40,7 +40,10 @@ class Ingest(systemClock: Clock) {
   private val zero_hash =
     "0000000000000000000000000000000000000000000000000000000000000000"
 
-  def ingest(spark: SparkSession, request: IngestRequest): IngestResult = {
+  def ingest(
+    spark: SparkSession,
+    request: IngestRequest
+  ): ExecuteQueryResponse = {
     val block = ingest(
       spark,
       request.source,
@@ -53,7 +56,7 @@ class Ingest(systemClock: Clock) {
       request.datasetVocab.withDefaults()
     )
 
-    IngestResult(block = block)
+    ExecuteQueryResponse.Success(block)
   }
 
   private def ingest(

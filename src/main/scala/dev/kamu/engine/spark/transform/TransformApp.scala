@@ -23,7 +23,7 @@ import java.io.{PrintWriter, StringWriter}
 
 object TransformApp {
   val requestPath = Paths.get("/opt/engine/in-out/request.yaml")
-  val resultPath = Paths.get("/opt/engine/in-out/response.yaml")
+  val responsePath = Paths.get("/opt/engine/in-out/response.yaml")
 
   def main(args: Array[String]) {
     val logger = LogManager.getLogger(getClass.getName)
@@ -33,7 +33,7 @@ object TransformApp {
 
     val request = yaml.load[ExecuteQueryRequest](requestPath)
     def saveResponse(response: ExecuteQueryResponse): Unit = {
-      yaml.save(response, resultPath)
+      yaml.save(response, responsePath)
     }
 
     logger.info("Starting transform.streaming")
