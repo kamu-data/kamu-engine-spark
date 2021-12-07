@@ -71,8 +71,7 @@ lazy val kamuCoreManifests = project
     libraryDependencies ++= Seq(
       deps.betterFiles,
       deps.pureConfig,
-      deps.pureConfigYaml,
-      deps.spire
+      deps.pureConfigYaml
     ),
     commonSettings
   )
@@ -87,7 +86,6 @@ lazy val versions = new {
   val pureConfig = "0.13.0"
   val spark = "3.1.2"
   val sparkTestingBase = s"${spark}_1.1.0"
-  val spire = "0.17.0"
 }
 
 lazy val deps =
@@ -105,8 +103,6 @@ lazy val deps =
     // Sedona
     val sedona = "org.apache.sedona" %% "sedona-python-adapter-3.0" % versions.sedona
     val sedonaGeotoolsWrapper = "org.datasyslab" % "geotools-wrapper" % "geotools-24.1"
-    // Math
-    val spire = "org.typelevel" %% "spire" % versions.spire
     // Test
     val scalaTest = "org.scalatest" %% "scalatest" % "3.0.8"
     val sparkHive = "org.apache.spark" %% "spark-hive" % versions.spark

@@ -23,22 +23,17 @@ import dev.kamu.core.manifests.{
   ExecuteQueryResponse,
   QueryInput
 }
-import dev.kamu.core.utils.Clock
 import dev.kamu.core.utils.fs._
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
 import dev.kamu.engine.spark.ingest.utils.DataFrameDigestSHA256
 import org.apache.log4j.LogManager
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions.{lit, row_number}
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import spire.math.{Empty, Interval}
-import spire.math.interval.{Closed, Open, Unbound}
-
-case class InputSlice(dataFrame: DataFrame, interval: Interval[Instant])
 
 /** Some logic eventually should be moved to the coordinator side **/
 class Transform(
-  spark: SparkSession,
-  systemClock: Clock
+  spark: SparkSession
 ) {
   private val logger = LogManager.getLogger(getClass.getName)
   private val zero_hash =
@@ -51,22 +46,18 @@ class Transform(
 
     File(request.newCheckpointDir).createDirectories()
 
-    val resultVocab = request.vocab.withDefaults()
+    val vocab = request.vocab.withDefaults()
 
-    val inputSlices =
-      prepareInputSlices(
-        spark,
-        request.inputs
-      )
+    val inputDataframes = prepareInputDataframes(spark, request.inputs)
 
     val inputWatermarks =
       getInputWatermarks(request.inputs, request.prevCheckpointDir)
 
-    inputSlices.values.foreach(_.dataFrame.cache())
+    inputDataframes.values.foreach(_.cache())
 
     // Setup inputs
-    for ((inputID, slice) <- inputSlices)
-      slice.dataFrame.createTempView(s"`$inputID`")
+    for ((inputID, slice) <- inputDataframes)
+      slice.createTempView(s"`$inputID`")
 
     // Setup transform
     for (step <- transform.queries.get) {
@@ -76,10 +67,41 @@ class Transform(
     }
 
     // Process data
-    val result = spark
+    var result = spark
       .sql(s"SELECT * FROM `${request.datasetID}`")
-      .orderBy(resultVocab.eventTimeColumn.get)
+
+    if (result.getColumn(vocab.offsetColumn.get).isDefined)
+      throw new Exception(
+        s"Transformed data contains a column that conflicts with the system column name, " +
+          s"you should either rename the data column or configure the dataset vocabulary " +
+          s"to use a different name: ${vocab.offsetColumn.get}"
+      )
+
+    if (result.getColumn(vocab.systemTimeColumn.get).isDefined)
+      throw new Exception(
+        s"Transformed data contains a column that conflicts with the system column name, " +
+          s"you should either rename the data column or configure the dataset vocabulary " +
+          s"to use a different name: ${vocab.systemTimeColumn.get}"
+      )
+
+    val window =
+      Window.partitionBy(lit(0)).orderBy(lit(vocab.eventTimeColumn.get))
+
+    result = result
       .coalesce(1)
+      .orderBy(vocab.eventTimeColumn.get)
+      .withColumn(
+        vocab.offsetColumn.get,
+        row_number().over(window) + (request.offset - 1)
+      )
+      .withColumn(
+        vocab.systemTimeColumn.get,
+        lit(Timestamp.from(request.systemTime))
+      )
+      .columnToFront(
+        vocab.offsetColumn.get,
+        vocab.systemTimeColumn.get
+      )
 
     result.cache()
 
@@ -87,44 +109,24 @@ class Transform(
     val block = MetadataBlock(
       blockHash = zero_hash,
       prevBlockHash = None,
-      systemTime = systemClock.instant(),
+      systemTime = request.systemTime,
       outputSlice =
         if (!result.isEmpty)
           Some(
-            DataSlice(
-              hash = computeHash(result),
-              interval =
-                if (result.isEmpty) Interval.empty
-                else Interval.point(systemClock.instant()),
-              numRecords = result.count()
+            OutputSlice(
+              dataLogicalHash = computeHash(result),
+              dataInterval = OffsetInterval(
+                start = request.offset,
+                end = request.offset + result.count() - 1
+              )
             )
           )
         else None,
       // Output's watermark is a minimum of input watermarks
       outputWatermark = Some(inputWatermarks.values.min),
-      inputSlices = Some(request.inputs.map(input => {
-        val slice = inputSlices(input.datasetID)
-        DataSlice(
-          hash = computeHash(slice.dataFrame),
-          interval = slice.interval,
-          numRecords = slice.dataFrame.count()
-        )
-      }))
+      // Input slices will be filled out by the coordinator
+      inputSlices = None
     )
-
-    if (result.getColumn(resultVocab.systemTimeColumn.get).isDefined)
-      throw new Exception(
-        s"Transformed data contains a column that conflicts with the system column name, " +
-          s"you should either rename the data column or configure the dataset vocabulary " +
-          s"to use a different name: ${resultVocab.systemTimeColumn.get}"
-      )
-
-    val resultWithSystemTime = result
-      .withColumn(
-        resultVocab.systemTimeColumn.get,
-        lit(systemClock.timestamp())
-      )
-      .columnToFront(resultVocab.systemTimeColumn.get)
 
     // Write input watermarks in case they will not be passed during next run
     for ((datasetID, watermark) <- inputWatermarks) {
@@ -133,30 +135,30 @@ class Transform(
 
     // Write data
     if (!result.isEmpty)
-      writeParquet(resultWithSystemTime, request.outDataPath)
+      writeParquet(result, request.outDataPath)
 
     // Release memory
     result.unpersist(true)
-    inputSlices.values.foreach(_.dataFrame.unpersist(true))
+    inputDataframes.values.foreach(_.unpersist(true))
 
     ExecuteQueryResponse.Success(metadataBlock = block)
   }
 
-  private def prepareInputSlices(
+  private def prepareInputDataframes(
     spark: SparkSession,
     inputs: Vector[QueryInput]
-  ): Map[DatasetID, InputSlice] = {
+  ): Map[DatasetID, DataFrame] = {
     inputs
       .map(input => {
-        (input.datasetID, prepareInputSlice(spark, input))
+        (input.datasetID, prepareInputDataframe(spark, input))
       })
       .toMap
   }
 
-  private def prepareInputSlice(
+  private def prepareInputDataframe(
     spark: SparkSession,
     input: QueryInput
-  ): InputSlice = {
+  ): DataFrame = {
     // TODO: use schema from metadata
     // TODO: use individually provided files instead of always reading all files
     val dataDir = input.schemaFile.getParent
@@ -164,45 +166,13 @@ class Transform(
 
     val df = spark.read
       .parquet(dataDir.toString)
-      .transform(sliceData(input.interval, vocab))
-      .drop(vocab.systemTimeColumn.get)
 
-    InputSlice(
-      dataFrame = df,
-      interval = input.interval
-    )
-  }
-
-  private def sliceData(interval: Interval[Instant], vocab: DatasetVocabulary)(
-    df: DataFrame
-  ): DataFrame = {
-    interval match {
-      case Empty() =>
+    input.dataInterval match {
+      case None =>
         df.where(lit(false))
-      case _ =>
-        val col = df.col(vocab.systemTimeColumn.get)
-
-        val dfLower = interval.lowerBound match {
-          case Unbound() =>
-            df
-          case Open(x) =>
-            df.filter(col > Timestamp.from(x))
-          case Closed(x) =>
-            df.filter(col >= Timestamp.from(x))
-          case _ =>
-            throw new RuntimeException(s"Unexpected: $interval")
-        }
-
-        interval.upperBound match {
-          case Unbound() =>
-            dfLower
-          case Open(x) =>
-            dfLower.filter(col < Timestamp.from(x))
-          case Closed(x) =>
-            dfLower.filter(col <= Timestamp.from(x))
-          case _ =>
-            throw new RuntimeException(s"Unexpected: $interval")
-        }
+      case Some(iv) =>
+        val col = df.col(vocab.offsetColumn.get)
+        df.filter(col >= iv.start && col <= iv.end)
     }
   }
 
@@ -299,12 +269,6 @@ class Transform(
     if (df.isEmpty)
       return zero_hash
     new DataFrameDigestSHA256().digest(df)
-  }
-
-  private def typedMap[T](m: Map[String, T]): Map[DatasetID, T] = {
-    m.map {
-      case (id, value) => (DatasetID(id), value)
-    }
   }
 
   private def maxOption[T: Ordering](seq: Seq[T]): Option[T] = {

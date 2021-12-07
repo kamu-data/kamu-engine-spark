@@ -14,7 +14,6 @@ import pureconfig.generic.auto._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import dev.kamu.core.manifests.{ExecuteQueryRequest, ExecuteQueryResponse}
-import dev.kamu.core.utils.ManualClock
 import org.apache.log4j.LogManager
 import org.apache.sedona.sql.utils.SedonaSQLRegistrator
 import org.apache.spark.sql.{AnalysisException, SparkSession}
@@ -38,16 +37,9 @@ object TransformApp {
 
     logger.info("Starting transform.streaming")
     logger.info(s"Executing request: $request")
-
-    val systemClock = new ManualClock()
-    systemClock.advance()
-
     logger.info(s"Processing dataset: ${request.datasetID}")
 
-    val transform = new Transform(
-      sparkSession,
-      systemClock
-    )
+    val transform = new Transform(sparkSession)
 
     Paths.get("/opt/engine")
 

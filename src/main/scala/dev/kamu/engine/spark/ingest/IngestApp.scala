@@ -13,15 +13,10 @@ import better.files.File
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests.{ExecuteQueryResponse, Manifest}
+import dev.kamu.core.manifests.ExecuteQueryResponse
 import dev.kamu.core.manifests.infra.IngestRequest
-import dev.kamu.core.utils.ManualClock
 import org.apache.log4j.LogManager
-import org.apache.spark.SparkConf
-import org.apache.hadoop.conf.Configuration
-import org.apache.sedona.core.serde.SedonaKryoRegistrator
 import org.apache.sedona.sql.utils.SedonaSQLRegistrator
-import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 
 import java.io.{PrintWriter, StringWriter}
@@ -41,10 +36,7 @@ object IngestApp {
       yaml.save(response, responsePath)
     }
 
-    val systemClock = new ManualClock()
-    systemClock.advance()
-
-    val ingest = new Ingest(systemClock)
+    val ingest = new Ingest()
 
     try {
       val response = ingest.ingest(sparkSession, request)

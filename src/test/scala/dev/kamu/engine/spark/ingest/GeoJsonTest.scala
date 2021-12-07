@@ -9,7 +9,7 @@
 package dev.kamu.engine.spark.ingest
 
 import java.nio.file.Files
-import dev.kamu.core.utils.{ManualClock, Temp}
+import dev.kamu.core.utils.Temp
 import dev.kamu.engine.spark.KamuDataFrameSuite
 import org.scalatest.{FunSuite, Matchers}
 
@@ -28,7 +28,7 @@ class GeoJsonTest extends FunSuite with KamuDataFrameSuite with Matchers {
 
         Files.write(filePath, geoJson.getBytes("utf8"))
 
-        val ingest = new Ingest(new ManualClock())
+        val ingest = new Ingest()
         val df = ingest.readGeoJSON(spark, null, filePath)
 
         df.count() shouldEqual 2

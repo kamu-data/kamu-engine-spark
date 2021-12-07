@@ -11,10 +11,10 @@ package dev.kamu.engine.spark.ingest
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests.DatasetLayout
+import dev.kamu.core.manifests.{DatasetLayout, OffsetInterval}
 import dev.kamu.core.manifests.infra.IngestRequest
 import dev.kamu.core.utils.fs._
-import dev.kamu.core.utils.{DockerClient, ManualClock, Temp}
+import dev.kamu.core.utils.{DockerClient, Temp}
 import dev.kamu.engine.spark.{EngineRunner, KamuDataFrameSuite}
 import org.scalatest.{FunSuite, Matchers}
 
@@ -22,6 +22,7 @@ import java.nio.file.{Files, Path, Paths}
 import java.time.Instant
 
 class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
+  import spark.implicits._
 
   def tempLayout(workspaceDir: Path, datasetName: String): DatasetLayout = {
     DatasetLayout(
@@ -51,7 +52,9 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           s"""
              |datasetID: out
              |ingestPath: "${inputPath}"
+             |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: null
+             |offset: 10
              |source:
              |  fetch:
              |    kind: url
@@ -85,10 +88,25 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.metadataBlock.outputSlice.get.numRecords shouldEqual 2
-        response.metadataBlock.outputSlice.get.hash shouldEqual "ec3c5e8abbefeadff9b0e3897e3c3c969d9e8de734c06d08f1b0296c194ca58f"
+        response.metadataBlock.outputSlice.get.dataInterval shouldEqual OffsetInterval(
+          start = 10,
+          end = 11
+        )
+        response.metadataBlock.outputSlice.get.dataLogicalHash shouldEqual "290f84d22491bdf25231a5616d3e87d71469645ac1a4b7ed7184da8ffce4e0f7"
         response.metadataBlock.outputWatermark shouldEqual Some(
           Instant.parse("2020-01-01T00:00:00Z")
+        )
+
+        val df = spark.read.parquet(outputPath.toString)
+        df.count() shouldEqual 2
+        df.schema.fields
+          .map(f => (f.name, f.dataType.typeName))
+          .toArray shouldEqual Array(
+          ("offset", "long"),
+          ("system_time", "timestamp"),
+          ("date", "date"),
+          ("city", "string"),
+          ("population", "integer")
         )
       }
     )
@@ -115,7 +133,9 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           s"""
              |datasetID: out
              |ingestPath: "${inputPath}"
+             |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
+             |offset: 0
              |source:
              |  fetch:
              |    kind: url
@@ -135,8 +155,11 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.metadataBlock.outputSlice.get.numRecords shouldEqual 263
-        response.metadataBlock.outputSlice.get.hash shouldEqual "265d533419048f85c73e5e37844c1088b03bfdb18f6873ed19f2de13abed72b3"
+        response.metadataBlock.outputSlice.get.dataInterval shouldEqual OffsetInterval(
+          start = 0,
+          end = 262
+        )
+        response.metadataBlock.outputSlice.get.dataLogicalHash shouldEqual "fcf10418d55358837c108ca4d894a64ff38827da7ef1ab2a1479c6b78ff8b96e"
 
         val df = spark.read.parquet(outputPath.toString)
 
@@ -144,6 +167,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         df.schema.fields
           .map(f => (f.name, f.dataType.typeName))
           .toArray shouldEqual Array(
+          ("offset", "long"),
           ("system_time", "timestamp"),
           ("event_time", "timestamp"),
           ("geometry", "geometry"),
@@ -182,7 +206,9 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           s"""
              |datasetID: out
              |ingestPath: "${inputPath}"
+             |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
+             |offset: 0
              |source:
              |  fetch:
              |    kind: url
@@ -202,8 +228,11 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.metadataBlock.outputSlice.get.numRecords shouldEqual 2
-        response.metadataBlock.outputSlice.get.hash shouldEqual "34c9c4bd5bdfd5d556f3cae3b72187fc7173b969201900d4ab00e93ae10af6bb"
+        response.metadataBlock.outputSlice.get.dataInterval shouldEqual OffsetInterval(
+          start = 0,
+          end = 1
+        )
+        response.metadataBlock.outputSlice.get.dataLogicalHash shouldEqual "a59146e7c43c28a12f3a55185b8e4cd570f8b9f4a73fbb9890273fd596b9cece"
 
         val df = spark.read.parquet(outputPath.toString)
 
@@ -211,6 +240,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         df.schema.fields
           .map(f => (f.name, f.dataType.typeName))
           .toArray shouldEqual Array(
+          ("offset", "long"),
           ("system_time", "timestamp"),
           ("event_time", "timestamp"),
           ("geometry", "geometry"),

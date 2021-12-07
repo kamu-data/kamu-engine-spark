@@ -21,7 +21,7 @@ import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import pureconfig.generic.auto._
 import dev.kamu.core.utils.fs._
-import dev.kamu.core.utils.{Clock, ZipFiles}
+import dev.kamu.core.utils.ZipFiles
 import dev.kamu.engine.spark.ingest.merge.MergeStrategy
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
 import dev.kamu.engine.spark.ingest.utils.DataFrameDigestSHA256
@@ -30,11 +30,11 @@ import org.apache.sedona.core.formatMapper.GeoJsonReader
 import org.apache.sedona.core.formatMapper.shapefileParser.ShapefileReader
 import org.apache.sedona.sql.utils.Adapter
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.{col, lit, max}
-import org.apache.spark.sql.types.{DataType, DataTypes}
-import spire.math.Interval
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions.{lit, max, row_number}
+import org.apache.spark.sql.types.DataTypes
 
-class Ingest(systemClock: Clock) {
+class Ingest {
   private val corruptRecordColumn = "__corrupt_record__"
   private val logger = LogManager.getLogger(getClass.getName)
   private val zero_hash =
@@ -47,7 +47,9 @@ class Ingest(systemClock: Clock) {
     val block = ingest(
       spark,
       request.source,
+      request.systemTime,
       request.eventTime,
+      request.offset,
       Paths.get(request.ingestPath),
       request.prevCheckpointDir.map(Paths.get(_)),
       Paths.get(request.newCheckpointDir),
@@ -62,7 +64,9 @@ class Ingest(systemClock: Clock) {
   private def ingest(
     spark: SparkSession,
     source: DatasetSource.Root,
+    systemTime: Instant,
     eventTime: Option[Instant],
+    offset: Long,
     filePath: Path,
     prevCheckpointDir: Option[Path],
     newCheckpointDir: Path,
@@ -90,22 +94,26 @@ class Ingest(systemClock: Clock) {
       .transform(checkForErrors)
       .transform(preprocess(source))
       .transform(normalizeSchema(source))
-      .transform(mergeWithExisting(source, eventTime, dataDir, vocab))
-      .transform(postprocess(vocab))
+      .transform(
+        mergeWithExisting(source, systemTime, eventTime, dataDir, vocab)
+      )
+      .transform(postprocess(vocab, systemTime, offset))
 
     result.cache()
 
     val block = MetadataBlock(
       blockHash = zero_hash,
       prevBlockHash = None,
-      systemTime = systemClock.instant(),
+      systemTime = systemTime,
       outputSlice =
         if (!result.isEmpty)
           Some(
-            DataSlice(
-              hash = computeHash(result.drop(vocab.systemTimeColumn.get)),
-              numRecords = result.count(),
-              interval = Interval.point(systemClock.instant())
+            OutputSlice(
+              dataLogicalHash = computeHash(result),
+              dataInterval = OffsetInterval(
+                start = offset,
+                end = offset + result.count() - 1
+              )
             )
           )
         else None,
@@ -285,6 +293,7 @@ class Ingest(systemClock: Clock) {
 
   private def mergeWithExisting(
     source: DatasetSource.Root,
+    systemTime: Instant,
     eventTime: Option[Instant],
     dataDir: Path,
     vocab: DatasetVocabulary
@@ -296,7 +305,7 @@ class Ingest(systemClock: Clock) {
     val mergeStrategy = MergeStrategy(
       kind = source.merge,
       eventTimeColumn = vocab.eventTimeColumn.get,
-      eventTime = Timestamp.from(eventTime.getOrElse(systemClock.instant()))
+      eventTime = Timestamp.from(eventTime.getOrElse(systemTime))
     )
 
     // Drop system columns before merging
@@ -314,7 +323,9 @@ class Ingest(systemClock: Clock) {
   }
 
   private def postprocess(
-    vocab: DatasetVocabulary
+    vocab: DatasetVocabulary,
+    systemTime: Instant,
+    offset: Long
   )(df: DataFrame): DataFrame = {
     if (df.getColumn(vocab.systemTimeColumn.get).isDefined)
       throw new Exception(
@@ -323,10 +334,17 @@ class Ingest(systemClock: Clock) {
           s"to use a different name: ${vocab.systemTimeColumn.get}"
       )
 
+    val window =
+      Window.partitionBy(lit(0)).orderBy(lit(vocab.eventTimeColumn.get))
+
     df.coalesce(1)
       .orderBy(vocab.eventTimeColumn.get)
-      .withColumn(vocab.systemTimeColumn.get, lit(systemClock.timestamp()))
-      .columnToFront(vocab.systemTimeColumn.get)
+      .withColumn(
+        vocab.offsetColumn.get,
+        row_number().over(window) + (offset - 1)
+      )
+      .withColumn(vocab.systemTimeColumn.get, lit(Timestamp.from(systemTime)))
+      .columnToFront(vocab.offsetColumn.get, vocab.systemTimeColumn.get)
   }
 
   private def writeParquet(df: DataFrame, outPath: Path): Unit = {
@@ -411,8 +429,7 @@ class Ingest(systemClock: Clock) {
   }
 
   private def computeHash(df: DataFrame): String = {
-    if (df.isEmpty)
-      return zero_hash
+    assert(!df.isEmpty)
     new DataFrameDigestSHA256().digest(df)
   }
 

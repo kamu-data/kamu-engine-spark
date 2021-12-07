@@ -9,7 +9,6 @@
 package dev.kamu.engine.spark.ingest
 
 import dev.kamu.core.manifests.DatasetVocabulary
-import dev.kamu.core.utils.ManualClock
 import dev.kamu.engine.spark.KamuDataFrameSuite
 import org.scalatest.{FunSuite, Matchers}
 
@@ -27,7 +26,7 @@ class WatermarkTest extends FunSuite with KamuDataFrameSuite with Matchers {
       )
       .toDF("event_time", "id", "data")
 
-    val ingest = new Ingest(new ManualClock())
+    val ingest = new Ingest()
     val wm = ingest.getOutputWatermark(
       df,
       None,
@@ -48,7 +47,7 @@ class WatermarkTest extends FunSuite with KamuDataFrameSuite with Matchers {
       )
       .toDF("event_time", "id", "data")
 
-    val ingest = new Ingest(new ManualClock())
+    val ingest = new Ingest()
 
     assertThrows[RuntimeException] {
       ingest.getOutputWatermark(
@@ -70,7 +69,7 @@ class WatermarkTest extends FunSuite with KamuDataFrameSuite with Matchers {
       )
       .toDF("event_time", "id", "data")
 
-    val ingest = new Ingest(new ManualClock())
+    val ingest = new Ingest()
 
     assertThrows[RuntimeException] {
       ingest.getOutputWatermark(

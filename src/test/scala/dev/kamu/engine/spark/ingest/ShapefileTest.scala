@@ -9,7 +9,7 @@
 package dev.kamu.engine.spark.ingest
 
 import dev.kamu.core.manifests.{DatasetSource, MergeStrategy, ReadStep}
-import dev.kamu.core.utils.{ManualClock, Temp}
+import dev.kamu.core.utils.Temp
 import dev.kamu.engine.spark.KamuDataFrameSuite
 import org.scalatest.{FunSuite, Matchers}
 
@@ -27,7 +27,7 @@ class ShapefileTest extends FunSuite with KamuDataFrameSuite with Matchers {
           )
         }
 
-        val ingest = new Ingest(new ManualClock())
+        val ingest = new Ingest()
         val df =
           ingest.readShapefile(
             spark,
