@@ -44,44 +44,16 @@ class Ingest {
     spark: SparkSession,
     request: IngestRequest
   ): ExecuteQueryResponse = {
-    val block = ingest(
-      spark,
-      request.source,
-      request.systemTime,
-      request.eventTime,
-      request.offset,
-      Paths.get(request.ingestPath),
-      request.prevCheckpointDir.map(Paths.get(_)),
-      Paths.get(request.newCheckpointDir),
-      Paths.get(request.dataDir),
-      Paths.get(request.outDataPath),
-      request.datasetVocab.withDefaults()
-    )
-
-    ExecuteQueryResponse.Success(block)
-  }
-
-  private def ingest(
-    spark: SparkSession,
-    source: DatasetSource.Root,
-    systemTime: Instant,
-    eventTime: Option[Instant],
-    offset: Long,
-    filePath: Path,
-    prevCheckpointDir: Option[Path],
-    newCheckpointDir: Path,
-    dataDir: Path,
-    outPath: Path,
-    vocab: DatasetVocabulary
-  ): MetadataBlock = {
     logger.info(
-      s"Ingesting the data: in=$filePath, out=$outPath, format=${source.read}"
+      s"Ingesting the data per request: $request"
     )
+
+    val vocab = request.datasetVocab.withDefaults()
 
     // Needed to make Spark re-read files that might've changed between ingest runs
     spark.sqlContext.clearCache()
 
-    val reader = source.read match {
+    val reader = request.source.read match {
       case _: ReadStep.EsriShapefile =>
         readShapefile _
       case _: ReadStep.GeoJson =>
@@ -90,45 +62,56 @@ class Ingest {
         readGeneric _
     }
 
-    val result = reader(spark, source, filePath)
+    val result = reader(spark, request.source, Paths.get(request.ingestPath))
       .transform(checkForErrors)
-      .transform(preprocess(source))
-      .transform(normalizeSchema(source))
+      .transform(preprocess(request.source))
+      .transform(normalizeSchema(request.source))
       .transform(
-        mergeWithExisting(source, systemTime, eventTime, dataDir, vocab)
+        mergeWithExisting(
+          request.source,
+          request.systemTime,
+          request.eventTime,
+          Paths.get(request.dataDir),
+          vocab
+        )
       )
-      .transform(postprocess(vocab, systemTime, offset))
+      .transform(
+        postprocess(vocab, request.systemTime, request.offset)
+      )
 
     result.cache()
 
-    val block = MetadataBlock(
-      blockHash = zero_hash,
-      prevBlockHash = None,
-      systemTime = systemTime,
-      outputSlice =
-        if (!result.isEmpty)
-          Some(
-            OutputSlice(
-              dataLogicalHash = computeHash(result),
-              dataInterval = OffsetInterval(
-                start = offset,
-                end = offset + result.count() - 1
-              )
-            )
+    val dataInterval =
+      if (!result.isEmpty)
+        Some(
+          OffsetInterval(
+            start = request.offset,
+            end = request.offset + result.count() - 1
           )
-        else None,
-      outputWatermark = getOutputWatermark(result, prevCheckpointDir, vocab)
+        )
+      else None
+
+    val outputWatermark = getOutputWatermark(
+      result,
+      request.prevCheckpointDir.map(Paths.get(_)),
+      vocab
     )
 
-    if (block.outputWatermark.isDefined) {
-      writeLastWatermark(newCheckpointDir, block.outputWatermark.get)
+    if (outputWatermark.isDefined) {
+      writeLastWatermark(
+        Paths.get(request.newCheckpointDir),
+        outputWatermark.get
+      )
     }
 
-    writeParquet(result, outPath)
+    writeParquet(result, Paths.get(request.outDataPath))
 
     result.unpersist()
 
-    block
+    ExecuteQueryResponse.Success(
+      dataInterval = dataInterval,
+      outputWatermark = outputWatermark
+    )
   }
 
   private def readGeneric(
@@ -427,10 +410,4 @@ class Ingest {
     reader.close()
     Some(watermark)
   }
-
-  private def computeHash(df: DataFrame): String = {
-    assert(!df.isEmpty)
-    new DataFrameDigestSHA256().digest(df)
-  }
-
 }

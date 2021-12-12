@@ -88,12 +88,11 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.metadataBlock.outputSlice.get.dataInterval shouldEqual OffsetInterval(
+        response.dataInterval.get shouldEqual OffsetInterval(
           start = 10,
           end = 11
         )
-        response.metadataBlock.outputSlice.get.dataLogicalHash shouldEqual "290f84d22491bdf25231a5616d3e87d71469645ac1a4b7ed7184da8ffce4e0f7"
-        response.metadataBlock.outputWatermark shouldEqual Some(
+        response.outputWatermark shouldEqual Some(
           Instant.parse("2020-01-01T00:00:00Z")
         )
 
@@ -155,11 +154,10 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.metadataBlock.outputSlice.get.dataInterval shouldEqual OffsetInterval(
+        response.dataInterval.get shouldEqual OffsetInterval(
           start = 0,
           end = 262
         )
-        response.metadataBlock.outputSlice.get.dataLogicalHash shouldEqual "fcf10418d55358837c108ca4d894a64ff38827da7ef1ab2a1479c6b78ff8b96e"
 
         val df = spark.read.parquet(outputPath.toString)
 
@@ -228,11 +226,10 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.metadataBlock.outputSlice.get.dataInterval shouldEqual OffsetInterval(
+        response.dataInterval.get shouldEqual OffsetInterval(
           start = 0,
           end = 1
         )
-        response.metadataBlock.outputSlice.get.dataLogicalHash shouldEqual "a59146e7c43c28a12f3a55185b8e4cd570f8b9f4a73fbb9890273fd596b9cece"
 
         val df = spark.read.parquet(outputPath.toString)
 

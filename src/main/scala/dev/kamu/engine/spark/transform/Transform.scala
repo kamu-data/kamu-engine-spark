@@ -105,29 +105,6 @@ class Transform(
 
     result.cache()
 
-    // Prepare metadata
-    val block = MetadataBlock(
-      blockHash = zero_hash,
-      prevBlockHash = None,
-      systemTime = request.systemTime,
-      outputSlice =
-        if (!result.isEmpty)
-          Some(
-            OutputSlice(
-              dataLogicalHash = computeHash(result),
-              dataInterval = OffsetInterval(
-                start = request.offset,
-                end = request.offset + result.count() - 1
-              )
-            )
-          )
-        else None,
-      // Output's watermark is a minimum of input watermarks
-      outputWatermark = Some(inputWatermarks.values.min),
-      // Input slices will be filled out by the coordinator
-      inputSlices = None
-    )
-
     // Write input watermarks in case they will not be passed during next run
     for ((datasetID, watermark) <- inputWatermarks) {
       writeWatermark(datasetID, request.newCheckpointDir, watermark)
@@ -137,11 +114,26 @@ class Transform(
     if (!result.isEmpty)
       writeParquet(result, request.outDataPath)
 
+    val dataInterval =
+      if (!result.isEmpty)
+        Some(
+          OffsetInterval(
+            start = request.offset,
+            end = request.offset + result.count() - 1
+          )
+        )
+      else None
+
+    val outputWatermark = Some(inputWatermarks.values.min)
+
     // Release memory
     result.unpersist(true)
     inputDataframes.values.foreach(_.unpersist(true))
 
-    ExecuteQueryResponse.Success(metadataBlock = block)
+    ExecuteQueryResponse.Success(
+      dataInterval = dataInterval,
+      outputWatermark = outputWatermark
+    )
   }
 
   private def prepareInputDataframes(
@@ -263,12 +255,6 @@ class Transform(
         if (sql.query.isDefined) Some(Vector(SqlQueryStep(None, sql.query.get)))
         else sql.queries
     )
-  }
-
-  private def computeHash(df: DataFrame): String = {
-    if (df.isEmpty)
-      return zero_hash
-    new DataFrameDigestSHA256().digest(df)
   }
 
   private def maxOption[T: Ordering](seq: Seq[T]): Option[T] = {
