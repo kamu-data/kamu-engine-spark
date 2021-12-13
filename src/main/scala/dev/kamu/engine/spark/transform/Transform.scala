@@ -84,6 +84,18 @@ class Transform(
           s"to use a different name: ${vocab.systemTimeColumn.get}"
       )
 
+    if (result.getColumn(vocab.eventTimeColumn.get).isEmpty)
+      throw new Exception(
+        s"Transformed data does not contains an event time column: ${vocab.eventTimeColumn.get}"
+      )
+
+    val eventTimeType =
+      result.schema(vocab.eventTimeColumn.get).dataType.typeName
+    if (!Array("timestamp", "date").contains(eventTimeType))
+      throw new RuntimeException(
+        s"Event time column can only be TIMESTAMP or DATE, got: $eventTimeType"
+      )
+
     val window =
       Window.partitionBy(lit(0)).orderBy(lit(vocab.eventTimeColumn.get))
 
