@@ -21,11 +21,10 @@ import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import dev.kamu.core.manifests.{
   ExecuteQueryRequest,
   ExecuteQueryResponse,
-  QueryInput
+  ExecuteQueryInput
 }
 import dev.kamu.core.utils.fs._
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
-import dev.kamu.engine.spark.ingest.utils.DataFrameDigestSHA256
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{lit, row_number}
@@ -56,19 +55,19 @@ class Transform(
     inputDataframes.values.foreach(_.cache())
 
     // Setup inputs
-    for ((inputID, slice) <- inputDataframes)
-      slice.createTempView(s"`$inputID`")
+    for ((inputName, slice) <- inputDataframes)
+      slice.createTempView(s"`$inputName`")
 
     // Setup transform
     for (step <- transform.queries.get) {
       spark
         .sql(step.query)
-        .createTempView(s"`${step.alias.getOrElse(request.datasetID)}`")
+        .createTempView(s"`${step.alias.getOrElse(request.datasetName)}`")
     }
 
     // Process data
     var result = spark
-      .sql(s"SELECT * FROM `${request.datasetID}`")
+      .sql(s"SELECT * FROM `${request.datasetName}`")
 
     if (result.getColumn(vocab.offsetColumn.get).isDefined)
       throw new Exception(
@@ -118,8 +117,8 @@ class Transform(
     result.cache()
 
     // Write input watermarks in case they will not be passed during next run
-    for ((datasetID, watermark) <- inputWatermarks) {
-      writeWatermark(datasetID, request.newCheckpointDir, watermark)
+    for ((datasetName, watermark) <- inputWatermarks) {
+      writeWatermark(datasetName, request.newCheckpointDir, watermark)
     }
 
     // Write data
@@ -150,18 +149,18 @@ class Transform(
 
   private def prepareInputDataframes(
     spark: SparkSession,
-    inputs: Vector[QueryInput]
-  ): Map[DatasetID, DataFrame] = {
+    inputs: Vector[ExecuteQueryInput]
+  ): Map[DatasetName, DataFrame] = {
     inputs
       .map(input => {
-        (input.datasetID, prepareInputDataframe(spark, input))
+        (input.datasetName, prepareInputDataframe(spark, input))
       })
       .toMap
   }
 
   private def prepareInputDataframe(
     spark: SparkSession,
-    input: QueryInput
+    input: ExecuteQueryInput
   ): DataFrame = {
     // TODO: use schema from metadata
     // TODO: use individually provided files instead of always reading all files
@@ -202,17 +201,17 @@ class Transform(
   }
 
   private def getInputWatermarks(
-    inputs: Vector[QueryInput],
+    inputs: Vector[ExecuteQueryInput],
     prevCheckpointDir: Option[Path]
-  ): Map[DatasetID, Instant] = {
-    val previousWatermarks: Map[DatasetID, Instant] =
+  ): Map[DatasetName, Instant] = {
+    val previousWatermarks: Map[DatasetName, Instant] =
       if (prevCheckpointDir.isDefined) {
         inputs
           .map(
             input =>
               (
-                input.datasetID,
-                readWatermark(input.datasetID, prevCheckpointDir.get)
+                input.datasetName,
+                readWatermark(input.datasetName, prevCheckpointDir.get)
               )
           )
           .toMap
@@ -223,19 +222,19 @@ class Transform(
     inputs
       .map(input => {
         (
-          input.datasetID,
+          input.datasetName,
           maxOption(input.explicitWatermarks.map(_.eventTime))
-            .getOrElse(previousWatermarks(input.datasetID))
+            .getOrElse(previousWatermarks(input.datasetName))
         )
       })
       .toMap
   }
 
   private def readWatermark(
-    datasetID: DatasetID,
+    datasetName: DatasetName,
     checkpointDir: Path
   ): Instant = {
-    val wmPath = checkpointDir.resolve(s"$datasetID.watermark")
+    val wmPath = checkpointDir.resolve(s"$datasetName.watermark")
     val reader = new Scanner(File(wmPath).newInputStream)
     val watermark = Instant.parse(reader.nextLine())
     reader.close()
@@ -243,11 +242,11 @@ class Transform(
   }
 
   private def writeWatermark(
-    datasetID: DatasetID,
+    datasetName: DatasetName,
     checkpointDir: Path,
     watermark: Instant
   ): Unit = {
-    val outputStream = File(checkpointDir.resolve(s"$datasetID.watermark")).newOutputStream
+    val outputStream = File(checkpointDir.resolve(s"$datasetName.watermark")).newOutputStream
     val writer = new PrintWriter(outputStream)
     writer.println(watermark.toString)
     writer.close()

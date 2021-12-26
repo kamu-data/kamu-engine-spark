@@ -50,7 +50,8 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
 
         val request = yaml.load[IngestRequest](
           s"""
-             |datasetID: out
+             |datasetID: "did:odf:abcd"
+             |datasetName: out
              |ingestPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: null
@@ -130,7 +131,8 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
 
         val request = yaml.load[IngestRequest](
           s"""
-             |datasetID: out
+             |datasetID: "did:odf:abcd"
+             |datasetName: out
              |ingestPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
@@ -202,7 +204,8 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
 
         val request = yaml.load[IngestRequest](
           s"""
-             |datasetID: out
+             |datasetID: "did:odf:abcd"
+             |datasetName: out
              |ingestPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
