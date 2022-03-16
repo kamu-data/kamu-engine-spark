@@ -298,6 +298,7 @@ class Ingest {
         p =>
           spark.read
             .parquet(p.toString)
+            .drop(vocab.offsetColumn.get)
             .drop(vocab.systemTimeColumn.get)
       )
 
