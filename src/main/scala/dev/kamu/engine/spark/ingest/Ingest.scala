@@ -24,7 +24,6 @@ import dev.kamu.core.utils.fs._
 import dev.kamu.core.utils.ZipFiles
 import dev.kamu.engine.spark.ingest.merge.MergeStrategy
 import dev.kamu.engine.spark.ingest.utils.DFUtils._
-import dev.kamu.engine.spark.ingest.utils.DataFrameDigestSHA256
 import org.apache.log4j.LogManager
 import org.apache.sedona.core.formatMapper.GeoJsonReader
 import org.apache.sedona.core.formatMapper.shapefileParser.ShapefileReader
@@ -37,8 +36,6 @@ import org.apache.spark.sql.types.DataTypes
 class Ingest {
   private val corruptRecordColumn = "__corrupt_record__"
   private val logger = LogManager.getLogger(getClass.getName)
-  private val zero_hash =
-    "0000000000000000000000000000000000000000000000000000000000000000"
 
   def ingest(
     spark: SparkSession,
@@ -93,13 +90,13 @@ class Ingest {
 
     val outputWatermark = getOutputWatermark(
       result,
-      request.prevCheckpointDir.map(Paths.get(_)),
+      request.prevCheckpointPath.map(Paths.get(_)),
       vocab
     )
 
     if (outputWatermark.isDefined) {
       writeLastWatermark(
-        Paths.get(request.newCheckpointDir),
+        Paths.get(request.newCheckpointPath),
         outputWatermark.get
       )
     }
@@ -116,7 +113,7 @@ class Ingest {
 
   private def readGeneric(
     spark: SparkSession,
-    source: DatasetSource.Root,
+    source: SetPollingSource,
     filePath: Path
   ): DataFrame = {
     val (name, options) = source.read match {
@@ -143,7 +140,7 @@ class Ingest {
   // TODO: This is inefficient
   private[ingest] def readShapefile(
     spark: SparkSession,
-    source: DatasetSource.Root,
+    source: SetPollingSource,
     filePath: Path
   ): DataFrame = {
     val fmt = source.read.asInstanceOf[ReadStep.EsriShapefile]
@@ -188,7 +185,7 @@ class Ingest {
   // TODO: This is very inefficient, should extend GeoSpark to support this
   private[ingest] def readGeoJSON(
     spark: SparkSession,
-    source: DatasetSource.Root,
+    source: SetPollingSource,
     filePath: Path
   ): DataFrame = {
     val rdd = GeoJsonReader.readToGeometryRDD(
@@ -221,7 +218,7 @@ class Ingest {
   }
 
   private def normalizeSchema(
-    source: DatasetSource.Root
+    source: SetPollingSource
   )(df: DataFrame): DataFrame = {
     if (source.read.schema.nonEmpty)
       return df
@@ -239,7 +236,7 @@ class Ingest {
   }
 
   private def preprocess(
-    source: DatasetSource.Root
+    source: SetPollingSource
   )(df: DataFrame): DataFrame = {
     if (source.preprocess.isEmpty)
       return df
@@ -275,7 +272,7 @@ class Ingest {
   }
 
   private def mergeWithExisting(
-    source: DatasetSource.Root,
+    source: SetPollingSource,
     systemTime: Instant,
     eventTime: Option[Instant],
     dataDir: Path,

@@ -35,22 +35,18 @@ class Transform(
   spark: SparkSession
 ) {
   private val logger = LogManager.getLogger(getClass.getName)
-  private val zero_hash =
-    "0000000000000000000000000000000000000000000000000000000000000000"
 
   def execute(
     request: ExecuteQueryRequest
   ): ExecuteQueryResponse = {
     val transform = loadTransform(request.transform)
 
-    File(request.newCheckpointDir).createDirectories()
-
     val vocab = request.vocab.withDefaults()
 
     val inputDataframes = prepareInputDataframes(spark, request.inputs)
 
     val inputWatermarks =
-      getInputWatermarks(request.inputs, request.prevCheckpointDir)
+      getInputWatermarks(request.inputs, request.prevCheckpointPath)
 
     inputDataframes.values.foreach(_.cache())
 
@@ -118,7 +114,7 @@ class Transform(
 
     // Write input watermarks in case they will not be passed during next run
     for ((datasetName, watermark) <- inputWatermarks) {
-      writeWatermark(datasetName, request.newCheckpointDir, watermark)
+      writeWatermark(datasetName, request.newCheckpointPath, watermark)
     }
 
     // Write data
@@ -246,6 +242,7 @@ class Transform(
     checkpointDir: Path,
     watermark: Instant
   ): Unit = {
+    File(checkpointDir).createDirectories()
     val outputStream = File(checkpointDir.resolve(s"$datasetName.watermark")).newOutputStream
     val writer = new PrintWriter(outputStream)
     writer.println(watermark.toString)

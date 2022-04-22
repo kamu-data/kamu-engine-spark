@@ -8,7 +8,7 @@
 
 package dev.kamu.engine.spark.ingest
 
-import dev.kamu.core.manifests.{DatasetSource, MergeStrategy, ReadStep}
+import dev.kamu.core.manifests.{SetPollingSource, MergeStrategy, ReadStep}
 import dev.kamu.core.utils.Temp
 import dev.kamu.engine.spark.KamuDataFrameSuite
 import org.scalatest.{FunSuite, Matchers}
@@ -31,12 +31,12 @@ class ShapefileTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val df =
           ingest.readShapefile(
             spark,
-            DatasetSource.Root(
-              null,
-              None,
-              ReadStep.EsriShapefile(None, None),
-              None,
-              MergeStrategy.Append()
+            SetPollingSource(
+              fetch = null,
+              prepare = None,
+              read = ReadStep.EsriShapefile(None, None),
+              preprocess = None,
+              merge = MergeStrategy.Append()
             ),
             filePath
           )

@@ -1,6 +1,6 @@
 SPARK_IMAGE_VERSION = 3.1.2
 SPARK_IMAGE = bitnami/spark:$(SPARK_IMAGE_VERSION)
-ENGINE_IMAGE_VERSION = 0.15.1-spark_$(SPARK_IMAGE_VERSION)
+ENGINE_IMAGE_VERSION = 0.16.0-spark_$(SPARK_IMAGE_VERSION)
 ENGINE_IMAGE = kamudata/engine-spark:$(ENGINE_IMAGE_VERSION)
 
 
@@ -12,7 +12,7 @@ engine-assembly:
 .PHONY: adapter-assembly
 adapter-assembly:
 	cd adapter && \
-	cross build --target x86_64-unknown-linux-gnu --release
+	RUSTFLAGS="" cross build --target x86_64-unknown-linux-gnu --release
 
 
 .PHONY: image-build

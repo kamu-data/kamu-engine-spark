@@ -79,8 +79,8 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |      - city
              |datasetVocab:
              |  eventTimeColumn: date
-             |prevCheckpointDir: null
-             |newCheckpointDir: "${outputLayout.checkpointsDir}"
+             |prevCheckpointPath: null
+             |newCheckpointPath: "${outputLayout.checkpointsDir}"
              |dataDir: "${outputLayout.dataDir}"
              |outDataPath: "${outputPath}"
              |""".stripMargin
@@ -146,8 +146,8 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |  merge:
              |    kind: append
              |datasetVocab: {}
-             |prevCheckpointDir: null
-             |newCheckpointDir: "${outputLayout.checkpointsDir}"
+             |prevCheckpointPath: null
+             |newCheckpointPath: "${outputLayout.checkpointsDir}"
              |dataDir: "${outputLayout.dataDir}"
              |outDataPath: "${outputPath}"
              |""".stripMargin
@@ -219,8 +219,8 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |  merge:
              |    kind: append
              |datasetVocab: {}
-             |prevCheckpointDir: null
-             |newCheckpointDir: "${outputLayout.checkpointsDir}"
+             |prevCheckpointPath: null
+             |newCheckpointPath: "${outputLayout.checkpointsDir}"
              |dataDir: "${outputLayout.dataDir}"
              |outDataPath: "${outputPath}"
              |""".stripMargin

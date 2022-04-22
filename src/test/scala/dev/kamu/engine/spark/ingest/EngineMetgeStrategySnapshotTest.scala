@@ -75,8 +75,8 @@ class EngineMetgeStrategySnapshotTest
                |    primaryKey:
                |      - city
                |datasetVocab: {}
-               |prevCheckpointDir: null
-               |newCheckpointDir: "${outputLayout.checkpointsDir}"
+               |prevCheckpointPath: null
+               |newCheckpointPath: "${outputLayout.checkpointsDir}"
                |dataDir: "${outputLayout.dataDir}"
                |outDataPath: "${outputPath}"
                |""".stripMargin
@@ -143,8 +143,8 @@ class EngineMetgeStrategySnapshotTest
                |    primaryKey:
                |      - city
                |datasetVocab: {}
-               |prevCheckpointDir: null
-               |newCheckpointDir: "${outputLayout.checkpointsDir}"
+               |prevCheckpointPath: null
+               |newCheckpointPath: "${outputLayout.checkpointsDir}"
                |dataDir: "${outputLayout.dataDir}"
                |outDataPath: "${outputPath}"
                |""".stripMargin
