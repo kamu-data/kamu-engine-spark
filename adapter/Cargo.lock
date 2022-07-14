@@ -779,6 +779,7 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 [[package]]
 name = "opendatafabric"
 version = "0.94.0"
+source = "git+https://github.com/kamu-data/kamu-cli?branch=master#183bd95048152f74a396ed31ac9ff138f914f357"
 dependencies = [
  "bs58",
  "byteorder",

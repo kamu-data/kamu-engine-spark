@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 # Kamu
-opendatafabric = { path = "../../kamu-cli/opendatafabric" }
-# opendatafabric = { git = "https://github.com/kamu-data/kamu-cli", branch = "rfc-simple-transfer-protocol" }
+opendatafabric = { git = "https://github.com/kamu-data/kamu-cli", branch = "master" }
+# opendatafabric = { path = "../../kamu-cli/opendatafabric" }
 
 # RPC
 libc = "*"
