@@ -55,6 +55,8 @@ class Ingest {
         readShapefile _
       case _: ReadStep.GeoJson =>
         readGeoJSON _
+      case _: ReadStep.Parquet =>
+        readParquet _
       case _ =>
         readGeneric _
     }
@@ -136,6 +138,22 @@ class Ingest {
       .option("columnNameOfCorruptRecord", corruptRecordColumn)
       .load(filePath.toString)
   }
+
+  private[ingest] def readParquet(
+    spark: SparkSession,
+    source: SetPollingSource,
+    filePath: Path
+  ): DataFrame = {
+        
+    val reader = spark.read
+
+    val schema = source.read.schema.getOrElse(Vector.empty)
+    if (schema.nonEmpty)
+      reader.schema(schema.mkString(", "))
+
+    reader
+      .parquet(filePath.toString)
+  }  
 
   // TODO: This is inefficient
   private[ingest] def readShapefile(

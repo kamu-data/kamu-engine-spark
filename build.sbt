@@ -35,7 +35,9 @@ lazy val root = project
       deps.sparkSql % "provided",
       deps.sedona % "provided",
       deps.sedonaGeotoolsWrapper % "provided",
-      deps.sparkTestingBase % "test"
+      deps.sparkTestingBase % "test",
+      deps.parquet % "test",
+      deps.avro % "test",
     ),
     dependencyOverrides ++= Seq(
       // TODO: No f'ing idea why 2.12.2 version is being used why dependencyTree and other tools show only 2.10.0 being used
@@ -107,6 +109,9 @@ lazy val deps =
     val scalaTest = "org.scalatest" %% "scalatest" % "3.0.8"
     val sparkHive = "org.apache.spark" %% "spark-hive" % versions.spark
     val sparkTestingBase = "com.holdenkarau" %% "spark-testing-base" % versions.sparkTestingBase
+    // Avro
+    val parquet = "org.apache.parquet" % "parquet-avro" % "1.11.1"
+    var avro = "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.4"
   }
 
 //////////////////////////////////////////////////////////////////////////////
