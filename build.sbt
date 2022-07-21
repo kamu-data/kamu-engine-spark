@@ -37,7 +37,7 @@ lazy val root = project
       deps.sedonaGeotoolsWrapper % "provided",
       deps.sparkTestingBase % "test",
       deps.parquet % "test",
-      deps.avro % "test",
+      deps.avro % "test"
     ),
     dependencyOverrides ++= Seq(
       // TODO: No f'ing idea why 2.12.2 version is being used why dependencyTree and other tools show only 2.10.0 being used

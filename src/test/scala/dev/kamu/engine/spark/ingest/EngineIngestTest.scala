@@ -20,17 +20,14 @@ import dev.kamu.engine.spark.test.ParquetHelpers
 import org.scalatest.{FunSuite, Matchers}
 
 import java.nio.file.{Files, Path, Paths}
-import java.time.Instant
+import java.time.{Instant, LocalDate}
 import java.text.SimpleDateFormat
-import java.util.Date
 
-
-case class City(
-  date: Date,
+case class CityEvent(
+  date: LocalDate,
   city: String,
   population: Int
 )
-
 
 class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
   import spark.implicits._
@@ -268,14 +265,12 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
       tempDir => {
         val outputLayout = tempLayout(tempDir, "out")
 
-        val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
-
         val inputPath = tempDir.resolve("input1.parquet")
-        ParquetHelpers.write[City](
+        ParquetHelpers.write(
           inputPath,
           Seq(
-            City(dateFormat.parse("2020-01-01"), "A", 1000),
-            City(dateFormat.parse("2020-01-01"), "B", 2000)
+            CityEvent(LocalDate.parse("2020-01-01"), "A", 1000),
+            CityEvent(LocalDate.parse("2020-02-01"), "B", 2000)
           )
         )
 
@@ -288,7 +283,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |ingestPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
-             |offset: 0
+             |offset: 10
              |source:
              |  fetch:
              |    kind: url
@@ -323,6 +318,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           .toArray shouldEqual Array(
           ("offset", "long"),
           ("system_time", "timestamp"),
+          ("event_time", "timestamp"),
           ("date", "date"),
           ("city", "string"),
           ("population", "integer")
@@ -330,6 +326,5 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
       }
     )
   }
-
 
 }
