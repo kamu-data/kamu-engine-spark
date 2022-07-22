@@ -22,6 +22,7 @@ import org.scalatest.{FunSuite, Matchers}
 import java.nio.file.{Files, Path, Paths}
 import java.time.{Instant, LocalDate}
 import java.text.SimpleDateFormat
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
 case class CityEvent(
   date: LocalDate,
@@ -265,13 +266,14 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
       tempDir => {
         val outputLayout = tempLayout(tempDir, "out")
 
-        val inputPath = tempDir.resolve("input1.parquet")
+        val inputPath = tempDir.resolve("read.bin")
         ParquetHelpers.write(
           inputPath,
           Seq(
             CityEvent(LocalDate.parse("2020-01-01"), "A", 1000),
             CityEvent(LocalDate.parse("2020-02-01"), "B", 2000)
-          )
+          ),
+          CompressionCodecName.UNCOMPRESSED
         )
 
         val outputPath = outputLayout.dataDir.resolve("pending.snappy.parquet")

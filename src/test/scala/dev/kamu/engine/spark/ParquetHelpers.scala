@@ -22,7 +22,11 @@ import org.apache.parquet.avro.{AvroParquetReader, AvroParquetWriter}
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
 object ParquetHelpers {
-  def write[T: Encoder: Decoder](path: Path, data: Seq[T])(
+  def write[T: Encoder: Decoder](
+    path: Path,
+    data: Seq[T],
+    compressionCodec: CompressionCodecName = CompressionCodecName.SNAPPY
+  )(
     implicit schemaFor: SchemaFor[T]
   ): Unit = {
     val avroSchema = AvroSchema[T]
@@ -36,7 +40,7 @@ object ParquetHelpers {
       .builder[GenericRecord](new org.apache.hadoop.fs.Path(path.toUri))
       .withSchema(avroSchema)
       .withDataModel(GenericData.get)
-      .withCompressionCodec(CompressionCodecName.SNAPPY)
+      .withCompressionCodec(compressionCodec)
       .build()
 
     records.foreach(writer.write)
