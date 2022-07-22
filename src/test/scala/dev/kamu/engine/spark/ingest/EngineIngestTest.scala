@@ -294,7 +294,8 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |    kind: parquet
              |  merge:
              |    kind: append
-             |datasetVocab: {}
+             |datasetVocab:
+             |  eventTimeColumn: date
              |prevCheckpointPath: null
              |newCheckpointPath: "${outputLayout.checkpointsDir}"
              |dataDir: "${outputLayout.dataDir}"
@@ -310,7 +311,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           end = 11
         )
         response.outputWatermark shouldEqual Some(
-          Instant.parse("2020-01-01T00:00:00Z")
+          Instant.parse("2020-02-01T00:00:00Z")
         )
 
         val df = spark.read.parquet(outputPath.toString)
@@ -320,7 +321,6 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           .toArray shouldEqual Array(
           ("offset", "long"),
           ("system_time", "timestamp"),
-          ("event_time", "timestamp"),
           ("date", "date"),
           ("city", "string"),
           ("population", "integer")
