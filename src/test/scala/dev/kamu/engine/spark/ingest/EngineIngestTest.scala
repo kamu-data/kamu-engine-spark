@@ -16,10 +16,19 @@ import dev.kamu.core.manifests.infra.IngestRequest
 import dev.kamu.core.utils.fs._
 import dev.kamu.core.utils.{DockerClient, Temp}
 import dev.kamu.engine.spark.{EngineRunner, KamuDataFrameSuite}
+import dev.kamu.engine.spark.test.ParquetHelpers
 import org.scalatest.{FunSuite, Matchers}
 
 import java.nio.file.{Files, Path, Paths}
-import java.time.Instant
+import java.time.{Instant, LocalDate}
+import java.text.SimpleDateFormat
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
+
+case class CityEvent(
+  date: LocalDate,
+  city: String,
+  population: Int
+)
 
 class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
   import spark.implicits._
@@ -247,6 +256,74 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           ("id", "string"),
           ("zipcode", "string"),
           ("name", "string")
+        )
+      }
+    )
+  }
+
+  test("ingest Parquet") {
+    Temp.withRandomTempDir("kamu-engine-spark")(
+      tempDir => {
+        val outputLayout = tempLayout(tempDir, "out")
+
+        val inputPath = tempDir.resolve("read.bin")
+        ParquetHelpers.write(
+          inputPath,
+          Seq(
+            CityEvent(LocalDate.parse("2020-01-01"), "A", 1000),
+            CityEvent(LocalDate.parse("2020-02-01"), "B", 2000)
+          ),
+          CompressionCodecName.UNCOMPRESSED
+        )
+
+        val outputPath = outputLayout.dataDir.resolve("pending.snappy.parquet")
+
+        val request = yaml.load[IngestRequest](
+          s"""
+             |datasetID: "did:odf:abcd"
+             |datasetName: out
+             |ingestPath: "${inputPath}"
+             |systemTime: "2020-01-01T00:00:00Z"
+             |eventTime: "2020-01-01T00:00:00Z"
+             |offset: 10
+             |source:
+             |  fetch:
+             |    kind: url
+             |    url: http://localhost
+             |  read:
+             |    kind: parquet
+             |  merge:
+             |    kind: append
+             |datasetVocab:
+             |  eventTimeColumn: date
+             |prevCheckpointPath: null
+             |newCheckpointPath: "${outputLayout.checkpointsDir}"
+             |dataDir: "${outputLayout.dataDir}"
+             |outDataPath: "${outputPath}"
+             |""".stripMargin
+        )
+
+        val engineRunner = new EngineRunner(new DockerClient)
+        val response = engineRunner.ingest(request, tempDir)
+
+        response.dataInterval.get shouldEqual OffsetInterval(
+          start = 10,
+          end = 11
+        )
+        response.outputWatermark shouldEqual Some(
+          Instant.parse("2020-02-01T00:00:00Z")
+        )
+
+        val df = spark.read.parquet(outputPath.toString)
+        df.count() shouldEqual 2
+        df.schema.fields
+          .map(f => (f.name, f.dataType.typeName))
+          .toArray shouldEqual Array(
+          ("offset", "long"),
+          ("system_time", "timestamp"),
+          ("date", "date"),
+          ("city", "string"),
+          ("population", "integer")
         )
       }
     )
