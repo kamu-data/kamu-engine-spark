@@ -45,7 +45,7 @@ COPY target/scala-2.12/engine.spark.jar /opt/engine/bin/engine.spark.jar
 
 
 # Adapter
-COPY adapter/target/x86_64-unknown-linux-gnu/release/kamu-engine-spark-adapter /opt/engine/bin/adapter
+COPY adapter/target/x86_64-unknown-linux-musl/release/kamu-engine-spark-adapter /opt/engine/bin/adapter
 
 
 EXPOSE 2884/tcp
