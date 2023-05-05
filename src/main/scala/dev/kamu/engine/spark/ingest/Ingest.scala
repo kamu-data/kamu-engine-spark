@@ -8,11 +8,9 @@
 
 package dev.kamu.engine.spark.ingest
 
-import java.io.PrintWriter
 import java.nio.file.{Path, Paths}
 import java.sql.Timestamp
 import java.time.Instant
-import java.util.Scanner
 import java.util.zip.ZipInputStream
 import better.files.File
 import dev.kamu.core.manifests._
@@ -61,7 +59,7 @@ class Ingest {
         readGeneric _
     }
 
-    val result = reader(spark, request.source, Paths.get(request.ingestPath))
+    val result = reader(spark, request.source, Paths.get(request.inputDataPath))
       .transform(checkForErrors)
       .transform(preprocess(request.source))
       .transform(normalizeSchema(request.source))
@@ -92,18 +90,11 @@ class Ingest {
 
     val outputWatermark = getOutputWatermark(
       result,
-      request.prevCheckpointPath.map(Paths.get(_)),
+      request.prevWatermark,
       vocab
     )
 
-    if (outputWatermark.isDefined) {
-      writeLastWatermark(
-        Paths.get(request.newCheckpointPath),
-        outputWatermark.get
-      )
-    }
-
-    writeParquet(result, Paths.get(request.outDataPath))
+    writeParquet(result, Paths.get(request.outputDataPath))
 
     result.unpersist()
 
@@ -348,7 +339,7 @@ class Ingest {
 
   private def writeParquet(df: DataFrame, outPath: Path): Unit = {
     val outDir = outPath.getParent
-    val tmpOutDir = outDir.resolve(".tmp")
+    val tmpOutDir = outDir.resolve(outPath.getFileName + ".tmp")
 
     df.write.parquet(tmpOutDir.toString)
 
@@ -371,11 +362,11 @@ class Ingest {
   // TODO: Idle datasets
   private[ingest] def getOutputWatermark(
     result: Dataset[Row],
-    prevCheckpointDir: Option[Path],
+    prevWatermark: Option[Instant],
     vocab: DatasetVocabulary
   ): Option[Instant] = {
     if (result.isEmpty) {
-      prevCheckpointDir.flatMap(readLastWatermark)
+      prevWatermark
     } else {
       val wm_type = result.schema(vocab.eventTimeColumn.get).dataType
 
@@ -392,38 +383,27 @@ class Ingest {
           s"Event time column cannot have NULLs, sample row: ${has_nulls.head()}"
         )
 
-      val max_wm = result
+      val maxEventTime = result
         .agg(max(wm_col.cast(DataTypes.TimestampType)))
         .head()
         .getTimestamp(0)
+        .toInstant
 
-      Some(max_wm.toInstant)
+      val newWatermark = if (prevWatermark.isDefined) {
+        if (maxEventTime.compareTo(prevWatermark.get) > 0) {
+          maxEventTime
+        } else {
+          prevWatermark.get
+        }
+      } else {
+        maxEventTime
+      }
+
+      logger.info(
+        s"Max output data event time $maxEventTime, prev watermark is $prevWatermark"
+      )
+
+      Some(newWatermark)
     }
-  }
-
-  private def writeLastWatermark(
-    checkpointDir: Path,
-    watermark: Instant
-  ): Unit = {
-    File(checkpointDir).createDirectories()
-    val outputStream = File(checkpointDir.resolve("last_watermark")).newOutputStream
-    val writer = new PrintWriter(outputStream)
-
-    writer.println(watermark.toString)
-
-    writer.close()
-    outputStream.close()
-  }
-
-  private def readLastWatermark(checkpointDir: Path): Option[Instant] = {
-    if (!File(checkpointDir).exists)
-      return None
-
-    val reader = new Scanner(
-      File(checkpointDir.resolve("last_watermark")).newInputStream
-    )
-    val watermark = Instant.parse(reader.nextLine())
-    reader.close()
-    Some(watermark)
   }
 }
