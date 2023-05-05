@@ -1,4 +1,4 @@
-ENGINE_VERSION = 0.18.0
+ENGINE_VERSION = 0.18.1
 SPARK_VERSION = 3.1.2
 SPARK_IMAGE = bitnami/spark:$(SPARK_VERSION)
 ENGINE_IMAGE_TAG = $(ENGINE_VERSION)-spark_$(SPARK_VERSION)
@@ -13,7 +13,7 @@ engine-assembly:
 .PHONY: adapter-assembly
 adapter-assembly:
 	cd adapter && \
-	RUSTFLAGS="" cross build --target x86_64-unknown-linux-gnu --release
+	RUSTFLAGS="" cross build --target x86_64-unknown-linux-musl --release
 
 
 .PHONY: image-build
