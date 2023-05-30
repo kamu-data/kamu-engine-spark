@@ -61,7 +61,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           s"""
              |datasetID: "did:odf:abcd"
              |datasetName: out
-             |ingestPath: "${inputPath}"
+             |inputDataPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: null
              |offset: 10
@@ -91,7 +91,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |prevCheckpointPath: null
              |newCheckpointPath: "${outputLayout.checkpointsDir}"
              |dataDir: "${outputLayout.dataDir}"
-             |outDataPath: "${outputPath}"
+             |outputDataPath: "${outputPath}"
              |""".stripMargin
         )
 
@@ -142,7 +142,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           s"""
              |datasetID: "did:odf:abcd"
              |datasetName: out
-             |ingestPath: "${inputPath}"
+             |inputDataPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
              |offset: 0
@@ -158,7 +158,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |prevCheckpointPath: null
              |newCheckpointPath: "${outputLayout.checkpointsDir}"
              |dataDir: "${outputLayout.dataDir}"
-             |outDataPath: "${outputPath}"
+             |outputDataPath: "${outputPath}"
              |""".stripMargin
         )
 
@@ -215,7 +215,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           s"""
              |datasetID: "did:odf:abcd"
              |datasetName: out
-             |ingestPath: "${inputPath}"
+             |inputDataPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
              |offset: 0
@@ -231,7 +231,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |prevCheckpointPath: null
              |newCheckpointPath: "${outputLayout.checkpointsDir}"
              |dataDir: "${outputLayout.dataDir}"
-             |outDataPath: "${outputPath}"
+             |outputDataPath: "${outputPath}"
              |""".stripMargin
         )
 
@@ -282,7 +282,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
           s"""
              |datasetID: "did:odf:abcd"
              |datasetName: out
-             |ingestPath: "${inputPath}"
+             |inputDataPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
              |offset: 10
@@ -299,7 +299,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |prevCheckpointPath: null
              |newCheckpointPath: "${outputLayout.checkpointsDir}"
              |dataDir: "${outputLayout.dataDir}"
-             |outDataPath: "${outputPath}"
+             |outputDataPath: "${outputPath}"
              |""".stripMargin
         )
 

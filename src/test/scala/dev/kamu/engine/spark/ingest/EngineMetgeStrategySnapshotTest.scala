@@ -56,7 +56,7 @@ class EngineMetgeStrategySnapshotTest
             s"""
                |datasetID: "did:odf:abcd"
                |datasetName: out
-               |ingestPath: "${inputPath}"
+               |inputDataPath: "${inputPath}"
                |systemTime: "2020-02-01T00:00:00Z"
                |eventTime: "2020-01-01T00:00:00Z"
                |offset: 0
@@ -78,7 +78,7 @@ class EngineMetgeStrategySnapshotTest
                |prevCheckpointPath: null
                |newCheckpointPath: "${outputLayout.checkpointsDir}"
                |dataDir: "${outputLayout.dataDir}"
-               |outDataPath: "${outputPath}"
+               |outputDataPath: "${outputPath}"
                |""".stripMargin
           )
 
@@ -124,7 +124,7 @@ class EngineMetgeStrategySnapshotTest
             s"""
                |datasetID: "did:odf:abcd"
                |datasetName: out
-               |ingestPath: "${inputPath}"
+               |inputDataPath: "${inputPath}"
                |systemTime: "2020-02-01T00:00:00Z"
                |eventTime: "2020-01-02T00:00:00Z"
                |offset: 2
@@ -146,7 +146,7 @@ class EngineMetgeStrategySnapshotTest
                |prevCheckpointPath: null
                |newCheckpointPath: "${outputLayout.checkpointsDir}"
                |dataDir: "${outputLayout.dataDir}"
-               |outDataPath: "${outputPath}"
+               |outputDataPath: "${outputPath}"
                |""".stripMargin
           )
 
