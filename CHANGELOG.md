@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.1] - 2023-07-14
+### Fixed
+- Transform engine will now read the list of input files as specified in the request instead of reading the entire directory of Parquet files
+
 ## [0.19.0] - 2023-05-29
 ### Changed
 - Configuring Spark to write timestamps in `Timestamp(MILLIS,true)` logical Parquet format instead of `int96` that is considered deprecated and causing compatibility issues

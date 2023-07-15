@@ -158,13 +158,12 @@ class Transform(
     spark: SparkSession,
     input: ExecuteQueryInput
   ): DataFrame = {
-    // TODO: use schema from metadata
-    // TODO: use individually provided files instead of always reading all files
-    val dataDir = input.schemaFile.getParent
     val vocab = input.vocab.withDefaults()
 
+    // TODO: use schema from metadata
     val df = spark.read
-      .parquet(dataDir.toString)
+      .format("parquet")
+      .parquet(input.dataPaths.map(_.toString): _*)
 
     input.dataInterval match {
       case None =>

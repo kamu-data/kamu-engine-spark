@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 
 class EngineRunner(
   dockerClient: DockerClient,
-  image: String = "ghcr.io/kamu-data/engine-spark:0.19.0-spark_3.1.2"
+  image: String = "ghcr.io/kamu-data/engine-spark:0.19.1-spark_3.1.2"
 ) {
   private val logger = LoggerFactory.getLogger(getClass)
 
