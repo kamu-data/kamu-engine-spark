@@ -29,7 +29,7 @@ class GeoJsonTest extends FunSuite with KamuDataFrameSuite with Matchers {
         Files.write(filePath, geoJson.getBytes("utf8"))
 
         val ingest = new Ingest()
-        val df = ingest.readGeoJSON(spark, null, filePath)
+        val df = ingest.readNdGeoJSON(spark, null, filePath)
 
         df.count() shouldEqual 2
         df.schema.fields

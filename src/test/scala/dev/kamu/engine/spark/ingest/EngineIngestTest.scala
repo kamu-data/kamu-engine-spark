@@ -37,8 +37,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
     DatasetLayout(
       metadataDir = workspaceDir.resolve("meta", datasetName),
       dataDir = workspaceDir.resolve("data", datasetName),
-      checkpointsDir = workspaceDir.resolve("checkpoints", datasetName),
-      cacheDir = workspaceDir.resolve("cache", datasetName)
+      checkpointsDir = workspaceDir.resolve("checkpoints", datasetName)
     )
   }
 
@@ -59,21 +58,21 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
 
         val request = yaml.load[IngestRequest](
           s"""
-             |datasetID: "did:odf:abcd"
-             |datasetName: out
+             |datasetId: "did:odf:abcd"
+             |datasetAlias: out
              |inputDataPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: null
-             |offset: 10
+             |nextOffset: 10
              |source:
              |  fetch:
-             |    kind: url
+             |    kind: Url
              |    url: http://localhost
              |  read:
-             |    kind: csv
+             |    kind: Csv
              |    header: true
              |  preprocess:
-             |    kind: sql
+             |    kind: Sql
              |    engine: spark
              |    query: |
              |      select
@@ -82,7 +81,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
              |        cast(population as INT) as population
              |      from input
              |  merge:
-             |    kind: ledger
+             |    kind: Ledger
              |    primaryKey:
              |      - date
              |      - city
@@ -98,11 +97,11 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.dataInterval.get shouldEqual OffsetInterval(
+        response.newOffsetInterval.get shouldEqual OffsetInterval(
           start = 10,
           end = 11
         )
-        response.outputWatermark shouldEqual Some(
+        response.newWatermark shouldEqual Some(
           Instant.parse("2020-01-01T00:00:00Z")
         )
 
@@ -140,20 +139,20 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
 
         val request = yaml.load[IngestRequest](
           s"""
-             |datasetID: "did:odf:abcd"
-             |datasetName: out
+             |datasetId: "did:odf:abcd"
+             |datasetAlias: out
              |inputDataPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
-             |offset: 0
+             |nextOffset: 0
              |source:
              |  fetch:
-             |    kind: url
+             |    kind: Url
              |    url: http://localhost
              |  read:
-             |    kind: esriShapefile
+             |    kind: EsriShapefile
              |  merge:
-             |    kind: append
+             |    kind: Append
              |datasetVocab: {}
              |prevCheckpointPath: null
              |newCheckpointPath: "${outputLayout.checkpointsDir}"
@@ -165,7 +164,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.dataInterval.get shouldEqual OffsetInterval(
+        response.newOffsetInterval.get shouldEqual OffsetInterval(
           start = 0,
           end = 262
         )
@@ -213,20 +212,20 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
 
         val request = yaml.load[IngestRequest](
           s"""
-             |datasetID: "did:odf:abcd"
-             |datasetName: out
+             |datasetId: "did:odf:abcd"
+             |datasetAlias: out
              |inputDataPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
-             |offset: 0
+             |nextOffset: 0
              |source:
              |  fetch:
-             |    kind: url
+             |    kind: Url
              |    url: http://localhost
              |  read:
-             |    kind: geoJson
+             |    kind: NdGeoJson
              |  merge:
-             |    kind: append
+             |    kind: Append
              |datasetVocab: {}
              |prevCheckpointPath: null
              |newCheckpointPath: "${outputLayout.checkpointsDir}"
@@ -238,7 +237,7 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.dataInterval.get shouldEqual OffsetInterval(
+        response.newOffsetInterval.get shouldEqual OffsetInterval(
           start = 0,
           end = 1
         )
@@ -280,20 +279,20 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
 
         val request = yaml.load[IngestRequest](
           s"""
-             |datasetID: "did:odf:abcd"
-             |datasetName: out
+             |datasetId: "did:odf:abcd"
+             |datasetAlias: out
              |inputDataPath: "${inputPath}"
              |systemTime: "2020-01-01T00:00:00Z"
              |eventTime: "2020-01-01T00:00:00Z"
-             |offset: 10
+             |nextOffset: 10
              |source:
              |  fetch:
-             |    kind: url
+             |    kind: Url
              |    url: http://localhost
              |  read:
-             |    kind: parquet
+             |    kind: Parquet
              |  merge:
-             |    kind: append
+             |    kind: Append
              |datasetVocab:
              |  eventTimeColumn: date
              |prevCheckpointPath: null
@@ -306,11 +305,11 @@ class EngineIngestTest extends FunSuite with KamuDataFrameSuite with Matchers {
         val engineRunner = new EngineRunner(new DockerClient)
         val response = engineRunner.ingest(request, tempDir)
 
-        response.dataInterval.get shouldEqual OffsetInterval(
+        response.newOffsetInterval.get shouldEqual OffsetInterval(
           start = 10,
           end = 11
         )
-        response.outputWatermark shouldEqual Some(
+        response.newWatermark shouldEqual Some(
           Instant.parse("2020-02-01T00:00:00Z")
         )
 

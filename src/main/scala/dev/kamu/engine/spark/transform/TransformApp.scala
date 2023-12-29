@@ -38,7 +38,7 @@ object TransformApp {
     logger.info("Starting transform.streaming")
     logger.info(s"Executing request: $request")
     logger.info(
-      s"Processing dataset: ${request.datasetName} (${request.datasetID})"
+      s"Processing dataset: ${request.datasetAlias} (${request.datasetId})"
     )
 
     val transform = new Transform(sparkSession)
@@ -62,7 +62,7 @@ object TransformApp {
     }
 
     logger.info(
-      s"Done processing dataset: ${request.datasetName} (${request.datasetID})"
+      s"Done processing dataset: ${request.datasetAlias} (${request.datasetId})"
     )
   }
 

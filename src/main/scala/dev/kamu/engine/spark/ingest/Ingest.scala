@@ -51,8 +51,8 @@ class Ingest {
     val reader = request.source.read match {
       case _: ReadStep.EsriShapefile =>
         readShapefile _
-      case _: ReadStep.GeoJson =>
-        readGeoJSON _
+      case _: ReadStep.NdGeoJson =>
+        readNdGeoJSON _
       case _: ReadStep.Parquet =>
         readParquet _
       case _ =>
@@ -73,22 +73,22 @@ class Ingest {
         )
       )
       .transform(
-        postprocess(vocab, request.systemTime, request.offset)
+        postprocess(vocab, request.systemTime, request.nextOffset)
       )
 
     result.cache()
 
-    val dataInterval =
+    val newOffsetInterval =
       if (!result.isEmpty)
         Some(
           OffsetInterval(
-            start = request.offset,
-            end = request.offset + result.count() - 1
+            start = request.nextOffset,
+            end = request.nextOffset + result.count() - 1
           )
         )
       else None
 
-    val outputWatermark = getOutputWatermark(
+    val newWatermark = getOutputWatermark(
       result,
       request.prevWatermark,
       vocab
@@ -99,8 +99,8 @@ class Ingest {
     result.unpersist()
 
     ExecuteQueryResponse.Success(
-      dataInterval = dataInterval,
-      outputWatermark = outputWatermark
+      newOffsetInterval = newOffsetInterval,
+      newWatermark = newWatermark
     )
   }
 
@@ -110,8 +110,8 @@ class Ingest {
     filePath: Path
   ): DataFrame = {
     val (name, options) = source.read match {
-      case csv: ReadStep.Csv        => ("csv", csv.toSparkReaderOptions)
-      case json: ReadStep.JsonLines => ("json", json.toSparkReaderOptions)
+      case csv: ReadStep.Csv     => ("csv", csv.toSparkReaderOptions)
+      case json: ReadStep.NdJson => ("json", json.toSparkReaderOptions)
       case _ =>
         throw new RuntimeException(s"Not a generic format: ${source.read}")
     }
@@ -135,7 +135,7 @@ class Ingest {
     source: SetPollingSource,
     filePath: Path
   ): DataFrame = {
-        
+
     val reader = spark.read
 
     val schema = source.read.schema.getOrElse(Vector.empty)
@@ -144,7 +144,7 @@ class Ingest {
 
     reader
       .parquet(filePath.toString)
-  }  
+  }
 
   // TODO: This is inefficient
   private[ingest] def readShapefile(
@@ -192,7 +192,7 @@ class Ingest {
   }
 
   // TODO: This is very inefficient, should extend GeoSpark to support this
-  private[ingest] def readGeoJSON(
+  private[ingest] def readNdGeoJSON(
     spark: SparkSession,
     source: SetPollingSource,
     filePath: Path

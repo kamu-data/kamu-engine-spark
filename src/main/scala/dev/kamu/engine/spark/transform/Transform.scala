@@ -34,6 +34,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 class Transform(
   spark: SparkSession
 ) {
+  private val outputViewName = "__output__"
   private val logger = LogManager.getLogger(getClass.getName)
 
   def execute(
@@ -43,27 +44,29 @@ class Transform(
 
     val vocab = request.vocab.withDefaults()
 
-    val inputDataframes = prepareInputDataframes(spark, request.inputs)
-
     val inputWatermarks =
-      getInputWatermarks(request.inputs, request.prevCheckpointPath)
-
-    inputDataframes.values.foreach(_.cache())
+      getInputWatermarks(request.queryInputs, request.prevCheckpointPath)
 
     // Setup inputs
-    for ((inputName, slice) <- inputDataframes)
-      slice.createTempView(s"`$inputName`")
+    val dataFrames = request.queryInputs
+      .map(input => {
+        val df = prepareInputDataframe(spark, input)
+        df.cache()
+        df.createTempView(input.queryAlias)
+        df
+      })
 
     // Setup transform
     for (step <- transform.queries.get) {
+      val name = step.alias.getOrElse(outputViewName)
       spark
         .sql(step.query)
-        .createTempView(s"`${step.alias.getOrElse(request.datasetName)}`")
+        .createTempView(s"`$name`")
     }
 
     // Process data
     var result = spark
-      .sql(s"SELECT * FROM `${request.datasetName}`")
+      .sql(s"SELECT * FROM `$outputViewName`")
 
     if (result.getColumn(vocab.offsetColumn.get).isDefined)
       throw new Exception(
@@ -99,7 +102,7 @@ class Transform(
       .orderBy(vocab.eventTimeColumn.get)
       .withColumn(
         vocab.offsetColumn.get,
-        row_number().over(window) + (request.offset - 1)
+        row_number().over(window) + (request.nextOffset - 1)
       )
       .withColumn(
         vocab.systemTimeColumn.get,
@@ -113,50 +116,39 @@ class Transform(
     result.cache()
 
     // Write input watermarks in case they will not be passed during next run
-    for ((datasetName, watermark) <- inputWatermarks) {
-      writeWatermark(datasetName, request.newCheckpointPath, watermark)
+    for ((datasetId, watermark) <- inputWatermarks) {
+      writeWatermark(datasetId, request.newCheckpointPath, watermark)
     }
 
     // Write data
     if (!result.isEmpty)
-      writeParquet(result, request.outDataPath)
+      writeParquet(result, request.newDataPath)
 
-    val dataInterval =
+    val newOffsetInterval =
       if (!result.isEmpty)
         Some(
           OffsetInterval(
-            start = request.offset,
-            end = request.offset + result.count() - 1
+            start = request.nextOffset,
+            end = request.nextOffset + result.count() - 1
           )
         )
       else None
 
-    val outputWatermark = Some(inputWatermarks.values.min)
+    val newWatermark = Some(inputWatermarks.values.min)
 
     // Release memory
     result.unpersist(true)
-    inputDataframes.values.foreach(_.unpersist(true))
+    dataFrames.foreach(_.unpersist(true))
 
     ExecuteQueryResponse.Success(
-      dataInterval = dataInterval,
-      outputWatermark = outputWatermark
+      newOffsetInterval = newOffsetInterval,
+      newWatermark = newWatermark
     )
-  }
-
-  private def prepareInputDataframes(
-    spark: SparkSession,
-    inputs: Vector[ExecuteQueryInput]
-  ): Map[DatasetName, DataFrame] = {
-    inputs
-      .map(input => {
-        (input.datasetName, prepareInputDataframe(spark, input))
-      })
-      .toMap
   }
 
   private def prepareInputDataframe(
     spark: SparkSession,
-    input: ExecuteQueryInput
+    input: ExecuteQueryRequestInput
   ): DataFrame = {
     val vocab = input.vocab.withDefaults()
 
@@ -165,7 +157,7 @@ class Transform(
       .format("parquet")
       .parquet(input.dataPaths.map(_.toString): _*)
 
-    input.dataInterval match {
+    input.offsetInterval match {
       case None =>
         df.where(lit(false))
       case Some(iv) =>
@@ -196,17 +188,17 @@ class Transform(
   }
 
   private def getInputWatermarks(
-    inputs: Vector[ExecuteQueryInput],
+    inputs: Vector[ExecuteQueryRequestInput],
     prevCheckpointDir: Option[Path]
-  ): Map[DatasetName, Instant] = {
-    val previousWatermarks: Map[DatasetName, Instant] =
+  ): Map[DatasetId, Instant] = {
+    val previousWatermarks: Map[DatasetId, Instant] =
       if (prevCheckpointDir.isDefined) {
         inputs
           .map(
             input =>
               (
-                input.datasetName,
-                readWatermark(input.datasetName, prevCheckpointDir.get)
+                input.datasetId,
+                readWatermark(input.datasetId, prevCheckpointDir.get)
               )
           )
           .toMap
@@ -217,19 +209,19 @@ class Transform(
     inputs
       .map(input => {
         (
-          input.datasetName,
+          input.datasetId,
           maxOption(input.explicitWatermarks.map(_.eventTime))
-            .getOrElse(previousWatermarks(input.datasetName))
+            .getOrElse(previousWatermarks(input.datasetId))
         )
       })
       .toMap
   }
 
   private def readWatermark(
-    datasetName: DatasetName,
+    datasetId: DatasetId,
     checkpointDir: Path
   ): Instant = {
-    val wmPath = checkpointDir.resolve(s"$datasetName.watermark")
+    val wmPath = checkpointDir.resolve(s"${datasetId.toMultibase()}.watermark")
     val reader = new Scanner(File(wmPath).newInputStream)
     val watermark = Instant.parse(reader.nextLine())
     reader.close()
@@ -237,12 +229,14 @@ class Transform(
   }
 
   private def writeWatermark(
-    datasetName: DatasetName,
+    datasetId: DatasetId,
     checkpointDir: Path,
     watermark: Instant
   ): Unit = {
     File(checkpointDir).createDirectories()
-    val outputStream = File(checkpointDir.resolve(s"$datasetName.watermark")).newOutputStream
+    val outputStream = File(
+      checkpointDir.resolve(s"${datasetId.toMultibase()}.watermark")
+    ).newOutputStream
     val writer = new PrintWriter(outputStream)
     writer.println(watermark.toString)
     writer.close()

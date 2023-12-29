@@ -32,7 +32,6 @@ class EngineMetgeStrategySnapshotTest
       metadataDir = workspaceDir.resolve("meta", datasetName),
       dataDir = workspaceDir.resolve("data", datasetName),
       checkpointsDir = workspaceDir.resolve("checkpoints", datasetName),
-      cacheDir = workspaceDir.resolve("cache", datasetName)
     )
   }
 
@@ -54,24 +53,24 @@ class EngineMetgeStrategySnapshotTest
 
           val request = yaml.load[IngestRequest](
             s"""
-               |datasetID: "did:odf:abcd"
-               |datasetName: out
+               |datasetId: "did:odf:abcd"
+               |datasetAlias: out
                |inputDataPath: "${inputPath}"
                |systemTime: "2020-02-01T00:00:00Z"
                |eventTime: "2020-01-01T00:00:00Z"
-               |offset: 0
+               |nextOffset: 0
                |source:
                |  fetch:
-               |    kind: url
+               |    kind: Url
                |    url: http://localhost
                |  read:
-               |    kind: csv
+               |    kind: Csv
                |    header: true
                |    schema:
                |      - city STRING
                |      - population INT
                |  merge:
-               |    kind: snapshot
+               |    kind: Snapshot
                |    primaryKey:
                |      - city
                |datasetVocab: {}
@@ -85,11 +84,11 @@ class EngineMetgeStrategySnapshotTest
           val engineRunner = new EngineRunner(new DockerClient)
           val response = engineRunner.ingest(request, tempDir)
 
-          response.dataInterval.get shouldEqual OffsetInterval(
+          response.newOffsetInterval.get shouldEqual OffsetInterval(
             start = 0,
             end = 1
           )
-          response.outputWatermark shouldEqual Some(
+          response.newWatermark shouldEqual Some(
             Instant.parse("2020-01-01T00:00:00Z")
           )
 
@@ -122,24 +121,24 @@ class EngineMetgeStrategySnapshotTest
 
           val request = yaml.load[IngestRequest](
             s"""
-               |datasetID: "did:odf:abcd"
-               |datasetName: out
+               |datasetId: "did:odf:abcd"
+               |datasetAlias: out
                |inputDataPath: "${inputPath}"
                |systemTime: "2020-02-01T00:00:00Z"
                |eventTime: "2020-01-02T00:00:00Z"
-               |offset: 2
+               |nextOffset: 2
                |source:
                |  fetch:
-               |    kind: url
+               |    kind: Url
                |    url: http://localhost
                |  read:
-               |    kind: csv
+               |    kind: Csv
                |    header: true
                |    schema:
                |      - city STRING
                |      - population INT
                |  merge:
-               |    kind: snapshot
+               |    kind: Snapshot
                |    primaryKey:
                |      - city
                |datasetVocab: {}
@@ -153,11 +152,11 @@ class EngineMetgeStrategySnapshotTest
           val engineRunner = new EngineRunner(new DockerClient)
           val response = engineRunner.ingest(request, tempDir)
 
-          response.dataInterval.get shouldEqual OffsetInterval(
+          response.newOffsetInterval.get shouldEqual OffsetInterval(
             start = 2,
             end = 2
           )
-          response.outputWatermark shouldEqual Some(
+          response.newWatermark shouldEqual Some(
             Instant.parse("2020-01-02T00:00:00Z")
           )
 
