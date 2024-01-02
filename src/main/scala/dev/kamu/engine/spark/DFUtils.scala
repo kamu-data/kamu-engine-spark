@@ -6,14 +6,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.engine.spark.ingest.utils
+package dev.kamu.engine.spark
 
+import better.files.File
 import org.apache.spark.sql.{
   Column,
   DFHelper,
   DataFrame,
   RelationalGroupedDataset
 }
+
+import java.nio.file.Path
 
 object DFUtils {
 
@@ -68,6 +71,27 @@ object DFUtils {
       val newColumns = front ++ back
       val head :: tail = newColumns
       df.select(head, tail: _*)
+    }
+
+    def writeParquetSingleFile(outPath: Path): Unit = {
+      val outDir = outPath.getParent
+      val tmpOutDir = outDir.resolve(".tmp")
+
+      df.write.parquet(tmpOutDir.toString)
+
+      val dataFiles = File(tmpOutDir).glob("*.snappy.parquet").toList
+
+      if (dataFiles.length != 1)
+        throw new RuntimeException(
+          "Unexpected number of files in output directory:\n" + File(tmpOutDir).list
+            .map(_.path.toString)
+            .mkString("\n")
+        )
+
+      val dataFile = dataFiles.head.path
+
+      File(dataFile).moveTo(outPath)
+      File(tmpOutDir).delete()
     }
   }
 

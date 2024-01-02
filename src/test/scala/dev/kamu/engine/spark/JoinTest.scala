@@ -6,7 +6,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.engine.spark.transform
+package dev.kamu.engine.spark
 
 import dev.kamu.engine.spark.KamuDataFrameSuite
 import org.apache.spark.sql.execution.streaming.MemoryStream

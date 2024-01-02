@@ -6,7 +6,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.engine.spark.transform
+package dev.kamu.engine.spark
 
 import java.io.PrintWriter
 import java.nio.file.Path
@@ -18,13 +18,9 @@ import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests.{
-  ExecuteQueryRequest,
-  ExecuteQueryResponse,
-  ExecuteQueryInput
-}
+import dev.kamu.core.manifests._
 import dev.kamu.core.utils.fs._
-import dev.kamu.engine.spark.ingest.utils.DFUtils._
+import DFUtils._
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{lit, row_number}
@@ -38,11 +34,10 @@ class Transform(
   private val logger = LogManager.getLogger(getClass.getName)
 
   def execute(
-    request: ExecuteQueryRequest
-  ): ExecuteQueryResponse = {
-    val transform = loadTransform(request.transform)
-
-    val vocab = request.vocab.withDefaults()
+    request: TransformRequest
+  ): TransformResponse = {
+    val transform = request.transform.asInstanceOf[Transform.Sql]
+    assert(transform.engine.toLowerCase == "spark")
 
     val inputWatermarks =
       getInputWatermarks(request.queryInputs, request.prevCheckpointPath)
@@ -68,49 +63,51 @@ class Transform(
     var result = spark
       .sql(s"SELECT * FROM `$outputViewName`")
 
-    if (result.getColumn(vocab.offsetColumn.get).isDefined)
+    val vocab = request.vocab
+
+    if (result.getColumn(vocab.offsetColumn).isDefined)
       throw new Exception(
         s"Transformed data contains a column that conflicts with the system column name, " +
           s"you should either rename the data column or configure the dataset vocabulary " +
-          s"to use a different name: ${vocab.offsetColumn.get}"
+          s"to use a different name: ${vocab.offsetColumn}"
       )
 
-    if (result.getColumn(vocab.systemTimeColumn.get).isDefined)
+    if (result.getColumn(vocab.systemTimeColumn).isDefined)
       throw new Exception(
         s"Transformed data contains a column that conflicts with the system column name, " +
           s"you should either rename the data column or configure the dataset vocabulary " +
-          s"to use a different name: ${vocab.systemTimeColumn.get}"
+          s"to use a different name: ${vocab.systemTimeColumn}"
       )
 
-    if (result.getColumn(vocab.eventTimeColumn.get).isEmpty)
+    if (result.getColumn(vocab.eventTimeColumn).isEmpty)
       throw new Exception(
-        s"Transformed data does not contains an event time column: ${vocab.eventTimeColumn.get}"
+        s"Transformed data does not contains an event time column: ${vocab.eventTimeColumn}"
       )
 
     val eventTimeType =
-      result.schema(vocab.eventTimeColumn.get).dataType.typeName
+      result.schema(vocab.eventTimeColumn).dataType.typeName
     if (!Array("timestamp", "date").contains(eventTimeType))
       throw new RuntimeException(
         s"Event time column can only be TIMESTAMP or DATE, got: $eventTimeType"
       )
 
     val window =
-      Window.partitionBy(lit(0)).orderBy(lit(vocab.eventTimeColumn.get))
+      Window.partitionBy(lit(0)).orderBy(lit(vocab.eventTimeColumn))
 
     result = result
       .coalesce(1)
-      .orderBy(vocab.eventTimeColumn.get)
+      .orderBy(vocab.eventTimeColumn)
       .withColumn(
-        vocab.offsetColumn.get,
+        vocab.offsetColumn,
         row_number().over(window) + (request.nextOffset - 1)
       )
       .withColumn(
-        vocab.systemTimeColumn.get,
+        vocab.systemTimeColumn,
         lit(Timestamp.from(request.systemTime))
       )
       .columnToFront(
-        vocab.offsetColumn.get,
-        vocab.systemTimeColumn.get
+        vocab.offsetColumn,
+        vocab.systemTimeColumn
       )
 
     result.cache()
@@ -122,7 +119,7 @@ class Transform(
 
     // Write data
     if (!result.isEmpty)
-      writeParquet(result, request.newDataPath)
+      result.writeParquetSingleFile(request.newDataPath)
 
     val newOffsetInterval =
       if (!result.isEmpty)
@@ -140,7 +137,7 @@ class Transform(
     result.unpersist(true)
     dataFrames.foreach(_.unpersist(true))
 
-    ExecuteQueryResponse.Success(
+    TransformResponse.Success(
       newOffsetInterval = newOffsetInterval,
       newWatermark = newWatermark
     )
@@ -148,10 +145,8 @@ class Transform(
 
   private def prepareInputDataframe(
     spark: SparkSession,
-    input: ExecuteQueryRequestInput
+    input: TransformRequestInput
   ): DataFrame = {
-    val vocab = input.vocab.withDefaults()
-
     // TODO: use schema from metadata
     val df = spark.read
       .format("parquet")
@@ -161,34 +156,13 @@ class Transform(
       case None =>
         df.where(lit(false))
       case Some(iv) =>
-        val col = df.col(vocab.offsetColumn.get)
+        val col = df.col(input.vocab.offsetColumn)
         df.filter(col >= iv.start && col <= iv.end)
     }
   }
 
-  private def writeParquet(df: DataFrame, outPath: Path): Unit = {
-    val outDir = outPath.getParent
-    val tmpOutDir = outDir.resolve(".tmp")
-
-    df.write.parquet(tmpOutDir.toString)
-
-    val dataFiles = File(tmpOutDir).glob("*.snappy.parquet").toList
-
-    if (dataFiles.length != 1)
-      throw new RuntimeException(
-        "Unexpected number of files in output directory:\n" + File(tmpOutDir).list
-          .map(_.path.toString)
-          .mkString("\n")
-      )
-
-    val dataFile = dataFiles.head.path
-
-    File(dataFile).moveTo(outPath)
-    File(tmpOutDir).delete()
-  }
-
   private def getInputWatermarks(
-    inputs: Vector[ExecuteQueryRequestInput],
+    inputs: Vector[TransformRequestInput],
     prevCheckpointDir: Option[Path]
   ): Map[DatasetId, Instant] = {
     val previousWatermarks: Map[DatasetId, Instant] =
@@ -241,21 +215,6 @@ class Transform(
     writer.println(watermark.toString)
     writer.close()
     outputStream.close()
-  }
-
-  private def loadTransform(
-    raw: dev.kamu.core.manifests.Transform
-  ): Transform.Sql = {
-    if (raw.engine != "spark")
-      throw new RuntimeException(s"Unsupported engine: ${raw.engine}")
-
-    val sql = raw.asInstanceOf[Transform.Sql]
-
-    sql.copy(
-      queries =
-        if (sql.query.isDefined) Some(Vector(SqlQueryStep(None, sql.query.get)))
-        else sql.queries
-    )
   }
 
   private def maxOption[T: Ordering](seq: Seq[T]): Option[T] = {

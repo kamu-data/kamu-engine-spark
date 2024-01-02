@@ -6,22 +6,21 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.engine.spark.ingest
+package dev.kamu.engine.spark
 
 import java.nio.file.Paths
 import better.files.File
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests.ExecuteQueryResponse
-import dev.kamu.core.manifests.infra.IngestRequest
+import dev.kamu.core.manifests._
 import org.apache.log4j.LogManager
 import org.apache.sedona.sql.utils.SedonaSQLRegistrator
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 
 import java.io.{PrintWriter, StringWriter}
 
-object IngestApp {
+object TransformApp {
   val requestPath = Paths.get("/opt/engine/in-out/request.yaml")
   val responsePath = Paths.get("/opt/engine/in-out/response.yaml")
 
@@ -31,33 +30,43 @@ object IngestApp {
     if (!File(requestPath).exists)
       throw new RuntimeException(s"Could not find request config: $requestPath")
 
-    val request = yaml.load[IngestRequest](requestPath)
-    def saveResponse(response: ExecuteQueryResponse): Unit = {
+    val request = yaml.load[TransformRequest](requestPath)
+    def saveResponse(response: TransformResponse): Unit = {
       yaml.save(response, responsePath)
     }
 
-    val ingest = new Ingest()
+    logger.info("Starting transform.streaming")
+    logger.info(s"Executing request: $request")
+    logger.info(
+      s"Processing dataset: ${request.datasetAlias} (${request.datasetId})"
+    )
+
+    val transform = new Transform(sparkSession)
 
     try {
-      val response = ingest.ingest(sparkSession, request)
+      val response = transform.execute(request)
       saveResponse(response)
     } catch {
       case e: AnalysisException =>
-        saveResponse(ExecuteQueryResponse.InvalidQuery(e.toString))
+        saveResponse(TransformResponse.InvalidQuery(e.toString))
         throw e
       case e: Exception =>
         val sw = new StringWriter()
         e.printStackTrace(new PrintWriter(sw))
         saveResponse(
-          ExecuteQueryResponse.InternalError(e.toString, Some(sw.toString))
+          TransformResponse.InternalError(e.toString, Some(sw.toString))
         )
         throw e
     }
+
+    logger.info(
+      s"Done processing dataset: ${request.datasetAlias} (${request.datasetId})"
+    )
   }
 
   def sparkSession: SparkSession = {
     val spark = SparkSession.builder
-      .appName("kamu-ingest")
+      .appName("kamu-transform")
       .getOrCreate()
 
     // TODO: For some reason registration of UDTs doesn't work from spark-defaults.conf

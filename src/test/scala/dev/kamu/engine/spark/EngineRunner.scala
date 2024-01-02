@@ -11,8 +11,7 @@ package dev.kamu.engine.spark
 import java.nio.file.{Path, Paths}
 import better.files.File
 import pureconfig.generic.auto._
-import dev.kamu.core.manifests.ExecuteQueryResponse
-import dev.kamu.core.manifests.infra.IngestRequest
+import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import dev.kamu.core.utils.Temp
@@ -25,20 +24,9 @@ import scala.reflect.ClassTag
 
 class EngineRunner(
   dockerClient: DockerClient,
-  image: String = "ghcr.io/kamu-data/engine-spark:0.20.0-spark_3.1.2"
+  image: String = "ghcr.io/kamu-data/engine-spark:0.21.0-spark_3.1.2"
 ) {
   private val logger = LoggerFactory.getLogger(getClass)
-
-  def ingest(
-    request: IngestRequest,
-    workspaceDir: Path
-  ): ExecuteQueryResponse.Success = {
-    submit[IngestRequest, ExecuteQueryResponse](
-      request,
-      workspaceDir,
-      "dev.kamu.engine.spark.ingest.IngestApp"
-    ).asInstanceOf[ExecuteQueryResponse.Success]
-  }
 
   def submit[Req: ClassTag, Resp: ClassTag](
     request: Req,
