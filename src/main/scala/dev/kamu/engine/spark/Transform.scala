@@ -47,7 +47,7 @@ class Transform(
       .map(input => {
         val df = prepareInputDataframe(spark, input)
         df.cache()
-        df.createTempView(input.queryAlias)
+        df.createTempView(s"`${input.queryAlias}`")
         df
       })
 
