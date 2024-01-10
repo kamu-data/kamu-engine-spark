@@ -6,11 +6,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.engine.spark
+package dev.kamu.engine.spark.test
 
 import java.sql.Timestamp
 import com.holdenkarau.spark.testing.DatasetSuiteBase
-import dev.kamu.engine.spark.KamuDataFrameSuite
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.OutputMode
 import org.scalatest.FunSuite

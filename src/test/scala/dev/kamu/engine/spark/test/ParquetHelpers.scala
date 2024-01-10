@@ -9,17 +9,13 @@
 package dev.kamu.engine.spark.test
 
 import java.nio.file.Path
-
-import com.sksamuel.avro4s.{
-  AvroSchema,
-  Decoder,
-  Encoder,
-  RecordFormat,
-  SchemaFor
-}
+import com.sksamuel.avro4s.{AvroSchema, Decoder, Encoder, RecordFormat, SchemaFor}
 import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.parquet.avro.{AvroParquetReader, AvroParquetWriter}
+import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.hadoop.util.HadoopInputFile
+import org.apache.parquet.schema.MessageType
 
 object ParquetHelpers {
   def write[T: Encoder: Decoder](
@@ -67,5 +63,16 @@ object ParquetHelpers {
 
     reader.close()
     records
+  }
+
+  def getSchemaFromFile(path: Path): MessageType = {
+    val file = HadoopInputFile.fromPath(
+      new org.apache.hadoop.fs.Path(path.toUri),
+      new org.apache.hadoop.conf.Configuration()
+    )
+    val reader = ParquetFileReader.open(file)
+    val schema = reader.getFileMetaData.getSchema
+    reader.close()
+    schema
   }
 }
