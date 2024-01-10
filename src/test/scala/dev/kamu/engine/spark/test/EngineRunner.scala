@@ -6,7 +6,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.engine.spark
+package dev.kamu.engine.spark.test
 
 import java.nio.file.{Path, Paths}
 import better.files.File
@@ -24,9 +24,20 @@ import scala.reflect.ClassTag
 
 class EngineRunner(
   dockerClient: DockerClient,
-  image: String = "ghcr.io/kamu-data/engine-spark:0.21.0-spark_3.1.2"
+  image: String = "ghcr.io/kamu-data/engine-spark:0.22.0-spark_3.1.2"
 ) {
   private val logger = LoggerFactory.getLogger(getClass)
+
+  def executeTransform(
+    request: TransformRequest,
+    workspaceDir: Path
+  ): TransformResponse.Success = {
+    submit[TransformRequest, TransformResponse](
+      request,
+      workspaceDir,
+      "dev.kamu.engine.spark.TransformApp"
+    ).asInstanceOf[TransformResponse.Success]
+  }
 
   def submit[Req: ClassTag, Resp: ClassTag](
     request: Req,
@@ -86,11 +97,9 @@ class EngineRunner(
             inOutDirInContainer.toString
           )
         )
-
       }
 
-      yaml
-        .load[Resp](inOutDir.resolve("response.yaml"))
+      yaml.load[Resp](inOutDir.resolve("response.yaml"))
     }
   }
 }

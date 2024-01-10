@@ -33,10 +33,11 @@ lazy val root = project
       deps.betterFiles,
       deps.sparkCore % "provided",
       deps.sparkSql % "provided",
+      deps.parquetColumn % "provided",
       deps.sedona % "provided",
       deps.sedonaGeotoolsWrapper % "provided",
       deps.sparkTestingBase % "test",
-      deps.parquet % "test",
+      deps.parquetAvro % "test",
       deps.avro % "test"
     ),
     dependencyOverrides ++= Seq(
@@ -88,6 +89,7 @@ lazy val versions = new {
   val pureConfig = "0.13.0"
   val spark = "3.1.2"
   val sparkTestingBase = s"${spark}_1.1.0"
+  val parquet = "1.10.1" // From Spark pom.xml
 }
 
 lazy val deps =
@@ -110,8 +112,9 @@ lazy val deps =
     val sparkHive = "org.apache.spark" %% "spark-hive" % versions.spark
     val sparkTestingBase = "com.holdenkarau" %% "spark-testing-base" % versions.sparkTestingBase
     // Avro
-    val parquet = "org.apache.parquet" % "parquet-avro" % "1.11.1"
-    var avro = "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.4"
+    val parquetColumn = "org.apache.parquet" % "parquet-column" % versions.parquet
+    val parquetAvro = "org.apache.parquet" % "parquet-avro" % versions.parquet
+    val avro = "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.4"
   }
 
 //////////////////////////////////////////////////////////////////////////////

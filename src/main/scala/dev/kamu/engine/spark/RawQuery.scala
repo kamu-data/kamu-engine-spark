@@ -9,9 +9,9 @@
 package dev.kamu.engine.spark
 
 import dev.kamu.core.manifests._
-import dev.kamu.engine.spark.DFUtils._
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.SparkSession
+import DFUtils._
 
 class RawQuery(
   spark: SparkSession

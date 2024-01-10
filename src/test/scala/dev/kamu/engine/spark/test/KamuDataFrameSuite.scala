@@ -6,7 +6,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-package dev.kamu.engine.spark
+package dev.kamu.engine.spark.test
 
 import java.sql.Timestamp
 import java.time.{LocalDate, LocalTime, ZoneOffset, ZonedDateTime}
