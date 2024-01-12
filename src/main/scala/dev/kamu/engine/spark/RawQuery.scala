@@ -50,7 +50,9 @@ class RawQuery(
 
     // Write data
     if (numRecords != 0)
-      outputData.writeParquetSingleFile(request.outputDataPath)
+      outputData
+        .coalesce(1)
+        .writeParquetSingleFile(request.outputDataPath)
 
     // Release memory
     outputData.unpersist(true)
