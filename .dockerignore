@@ -1,4 +1,3 @@
 *
 !image
 !target/scala-*/engine.spark.jar
-!adapter/target/*/release/kamu-engine-spark-adapter

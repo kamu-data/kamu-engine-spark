@@ -2,3 +2,4 @@ target/
 /test-data
 /.bsp
 /image/*.zip
+/image/tmp

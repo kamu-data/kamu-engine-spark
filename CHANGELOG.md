@@ -4,10 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.23.0] - 2024-02-??
+## [0.23.0] - 2024-02-11
 ### Changed
-- Upgraded Spark version to `?.?.?`
-- Enabled ANSI mode by default
+- Upgraded Spark version to `3.5.0`
+- Enabled [ANSI mode](https://spark.apache.org/docs/latest/sql-ref-ansi-compliance.html) by default
+### Added
+- Building a multi-platform image for `arm64` architectures
 
 ## [0.22.1] - 2024-01-11
 ### Fixed

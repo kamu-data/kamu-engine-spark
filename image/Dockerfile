@@ -1,6 +1,9 @@
-# Base source: https://github.com/bitnami/bitnami-docker-spark/blob/master/3/debian-10/Dockerfile
+# Source:
+# https://hub.docker.com/r/bitnami/spark/
+# https://github.com/bitnami/containers/tree/main/bitnami/spark
 ARG BASE_IMAGE
 FROM $BASE_IMAGE
+ARG TARGETPLATFORM
 
 # Reset to root to run installation tasks
 USER 0
@@ -8,10 +11,8 @@ USER 0
 
 # Tools
 RUN apt-get update && \
-    apt-get install -y wget unzip tini procps jq && \
-    rm -rf /root/.cache && rm -rf /var/cache/apt/* && \
-    wget -O /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/2.4.1/yq_linux_amd64" && \
-    chmod +x /usr/local/bin/yq
+    apt-get install -y wget unzip tini procps && \
+    apt-get clean && rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
 
 # Logging
@@ -47,16 +48,10 @@ COPY target/scala-2.12/engine.spark.jar /opt/engine/bin/engine.spark.jar
 
 
 # Adapter
-COPY adapter/target/x86_64-unknown-linux-musl/release/kamu-engine-spark-adapter /opt/engine/bin/adapter
+COPY image/tmp/$TARGETPLATFORM/adapter /opt/engine/bin/adapter
 
 
 EXPOSE 2884/tcp
 ENTRYPOINT ["/usr/bin/tini", "--"]
 ENV RUST_BACKTRACE=1
 CMD ["/opt/engine/bin/adapter"]
-
-# Restore base image's run config
-# WORKDIR /opt/bitnami/spark
-# USER 1001
-# ENTRYPOINT [ "/opt/bitnami/scripts/spark/entrypoint.sh" ]
-# CMD [ "/opt/bitnami/scripts/spark/run.sh" ]
