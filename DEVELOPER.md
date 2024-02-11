@@ -26,10 +26,10 @@ You will need:
 To install Java & Scala we recommend using [SdkMan](https://sdkman.io/). Install the tool itself and then you can use following versions of components:
 
 ```bash
-java: 8.0.292-zulu
-maven: 3.8.1
-sbt: 1.5.5
-scala: 2.12.13
+java: 17.0.10-oracle
+maven: 3.9.6
+sbt: 1.9.8
+scala: 2.12.18
 ```
 
 Once installed, you can configure IntelliJ IDEA to use this runtime and tools and open the directory as an SBT project.

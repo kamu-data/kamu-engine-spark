@@ -4,10 +4,10 @@ name := "kamu-engine-spark"
 ThisBuild / organization := "dev.kamu"
 ThisBuild / organizationName := "kamu.dev"
 ThisBuild / startYear := Some(2018)
-ThisBuild / licenses += ("MPL-2.0", new URL(
-  "https://www.mozilla.org/en-US/MPL/2.0/"
+ThisBuild / licenses += ("Apache-2.0", new URL(
+  "http://www.apache.org/licenses/LICENSE-2.0.html"
 ))
-ThisBuild / scalaVersion := "2.12.12"
+ThisBuild / scalaVersion := "2.12.18"
 
 // Needed by GeoSpark SNAPSHOT version
 ThisBuild / resolvers += "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
@@ -30,7 +30,6 @@ lazy val root = project
   .settings(
     libraryDependencies ++= Seq(
       deps.slf4jApi,
-      deps.betterFiles,
       deps.sparkCore % "provided",
       deps.sparkSql % "provided",
       deps.parquetColumn % "provided",
@@ -39,10 +38,6 @@ lazy val root = project
       deps.sparkTestingBase % "test",
       deps.parquetAvro % "test",
       deps.avro % "test"
-    ),
-    dependencyOverrides ++= Seq(
-      // TODO: No f'ing idea why 2.12.2 version is being used why dependencyTree and other tools show only 2.10.0 being used
-      "com.fasterxml.jackson.core" % "jackson-databind" % "2.10.0" % "test"
     ),
     commonSettings,
     sparkTestingSettings,
@@ -57,7 +52,6 @@ lazy val kamuCoreUtils = project
   .settings(
     libraryDependencies ++= Seq(
       deps.slf4jApi,
-      deps.betterFiles,
       deps.scalaTest % "test"
     ),
     commonSettings,
@@ -72,7 +66,6 @@ lazy val kamuCoreManifests = project
   .enablePlugins(AutomateHeaderPlugin)
   .settings(
     libraryDependencies ++= Seq(
-      deps.betterFiles,
       deps.pureConfig,
       deps.pureConfigYaml
     ),
@@ -84,20 +77,17 @@ lazy val kamuCoreManifests = project
 //////////////////////////////////////////////////////////////////////////////
 
 lazy val versions = new {
-  val betterFiles = "3.9.1"
-  val sedona = "1.0.1-incubating"
-  val pureConfig = "0.13.0"
-  val spark = "3.1.2"
-  val sparkTestingBase = s"${spark}_1.1.0"
-  val parquet = "1.10.1" // From Spark pom.xml
+  val sedona = "1.5.1"
+  val geotoolsWrapper = "1.5.1-28.2"
+  val pureConfig = "0.17.5"
+  val spark = "3.5.0"
+  val sparkTestingBase = s"${spark}_1.4.7"
+  val parquet = "1.13.1" // From Spark pom.xml
 }
 
 lazy val deps =
   new {
     val slf4jApi = "org.slf4j" % "slf4j-api" % "1.7.30"
-    // File System
-    val betterFiles = "com.github.pathikrit" %% "better-files" % versions.betterFiles
-    //val apacheCommonsCompress = "org.apache.commons" % "commons-compress" % versions.apacheCommonsCompress
     // Configs
     val pureConfig = "com.github.pureconfig" %% "pureconfig" % versions.pureConfig
     val pureConfigYaml = "com.github.pureconfig" %% "pureconfig-yaml" % versions.pureConfig
@@ -105,16 +95,16 @@ lazy val deps =
     val sparkCore = "org.apache.spark" %% "spark-core" % versions.spark
     val sparkSql = "org.apache.spark" %% "spark-sql" % versions.spark
     // Sedona
-    val sedona = "org.apache.sedona" %% "sedona-python-adapter-3.0" % versions.sedona
-    val sedonaGeotoolsWrapper = "org.datasyslab" % "geotools-wrapper" % "geotools-24.1"
+    val sedona = "org.apache.sedona" %% "sedona-spark-shaded-3.5" % versions.sedona
+    val sedonaGeotoolsWrapper = "org.datasyslab" % "geotools-wrapper" % versions.geotoolsWrapper
     // Test
-    val scalaTest = "org.scalatest" %% "scalatest" % "3.0.8"
+    val scalaTest = "org.scalatest" %% "scalatest" % "3.2.18"
     val sparkHive = "org.apache.spark" %% "spark-hive" % versions.spark
     val sparkTestingBase = "com.holdenkarau" %% "spark-testing-base" % versions.sparkTestingBase
     // Avro
     val parquetColumn = "org.apache.parquet" % "parquet-column" % versions.parquet
     val parquetAvro = "org.apache.parquet" % "parquet-avro" % versions.parquet
-    val avro = "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.4"
+    val avro = "com.sksamuel.avro4s" %% "avro4s-core" % "3.1.1"
   }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -126,9 +116,22 @@ lazy val commonSettings = Seq()
 lazy val sparkTestingSettings = Seq(
   Test / fork := true,
   Test / parallelExecution := false,
+  // See: https://stackoverflow.com/questions/72724816/running-unit-tests-with-spark-3-3-0-on-java-17-fails-with-illegalaccesserror-cl
   javaOptions ++= Seq(
     "-Xms512M",
     "-Xmx2048M",
-    "-XX:+CMSClassUnloadingEnabled"
+    "--add-opens=java.base/java.lang=ALL-UNNAMED",
+    "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+    "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+    "--add-opens=java.base/java.io=ALL-UNNAMED",
+    "--add-opens=java.base/java.net=ALL-UNNAMED",
+    "--add-opens=java.base/java.nio=ALL-UNNAMED",
+    "--add-opens=java.base/java.util=ALL-UNNAMED",
+    "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+    "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+    "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+    "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+    "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED"
   )
 )

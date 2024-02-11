@@ -1,21 +1,28 @@
 /*
- * Copyright (c) 2018 kamu.dev
+ * Copyright 2018 kamu.dev
  *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package dev.kamu.engine.spark
 
 import java.nio.file.Paths
-import better.files.File
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
-import dev.kamu.core.manifests._
+import dev.kamu.core.manifests.{TransformRequest, TransformResponse}
 import org.apache.log4j.LogManager
-import org.apache.sedona.sql.utils.SedonaSQLRegistrator
+import org.apache.sedona.spark.SedonaContext
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 
 import java.io.{PrintWriter, StringWriter}
@@ -27,7 +34,7 @@ object TransformApp {
   def main(args: Array[String]) {
     val logger = LogManager.getLogger(getClass.getName)
 
-    if (!File(requestPath).exists)
+    if (!requestPath.toFile.exists())
       throw new RuntimeException(s"Could not find request config: $requestPath")
 
     val request = yaml.load[TransformRequest](requestPath)
@@ -70,7 +77,8 @@ object TransformApp {
       .getOrCreate()
 
     // TODO: For some reason registration of UDTs doesn't work from spark-defaults.conf
-    SedonaSQLRegistrator.registerAll(spark)
+    // See: https://sedona.apache.org/1.5.1/tutorial/sql/
+    val _sedona = SedonaContext.create(spark)
 
     spark
   }

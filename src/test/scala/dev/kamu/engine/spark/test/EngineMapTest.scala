@@ -1,9 +1,17 @@
 /*
- * Copyright (c) 2018 kamu.dev
+ * Copyright 2018 kamu.dev
  *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package dev.kamu.engine.spark.test
@@ -14,7 +22,8 @@ import pureconfig.generic.auto._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
 import dev.kamu.core.manifests.parsing.pureconfig.yaml.defaults._
 import dev.kamu.engine.spark.Op
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite._
+import org.scalatest.matchers.should.Matchers
 
 import java.nio.file.Files
 import java.sql.Timestamp
@@ -28,9 +37,9 @@ case class TickerRaw(
   value: Long
 ) extends HasOffset
 
-class EngineMapTest extends FunSuite with EngineHelpers with Matchers {
+class EngineMapTest extends AnyFunSuite with EngineHelpers with Matchers {
   test("Map - basic") {
-    Temp.withRandomTempDir("kamu-engine-flink") { tempDir =>
+    Temp.withRandomTempDir("kamu-engine-spark-") { tempDir =>
       val engineRunner = new EngineRunner(new DockerClient())
 
       val inputDir = tempDir.resolve("in")
@@ -100,11 +109,11 @@ class EngineMapTest extends FunSuite with EngineHelpers with Matchers {
           .toString
           .trim() shouldEqual
           """message spark_schema {
-            |  optional int64 offset;
+            |  required int64 offset;
             |  optional int32 op;
-            |  required int64 system_time (TIMESTAMP_MILLIS);
-            |  optional int64 event_time (TIMESTAMP_MILLIS);
-            |  optional binary symbol (UTF8);
+            |  required int64 system_time (TIMESTAMP(MILLIS,true));
+            |  optional int64 event_time (TIMESTAMP(MILLIS,true));
+            |  optional binary symbol (STRING);
             |  optional int64 value;
             |}""".stripMargin
 

@@ -1,15 +1,22 @@
 /*
- * Copyright (c) 2018 kamu.dev
+ * Copyright 2018 kamu.dev
  *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package dev.kamu.engine.spark.test
 
 import java.nio.file.{Path, Paths}
-import better.files.File
 import pureconfig.generic.auto._
 import dev.kamu.core.manifests._
 import dev.kamu.core.manifests.parsing.pureconfig.yaml
@@ -18,15 +25,26 @@ import dev.kamu.core.utils.Temp
 import dev.kamu.core.utils.fs._
 import dev.kamu.core.utils.{DockerClient, DockerRunArgs}
 import org.slf4j.LoggerFactory
-import pureconfig.{ConfigReader, ConfigWriter, Derivation}
+import pureconfig.{ConfigReader, ConfigWriter}
 
 import scala.reflect.ClassTag
 
 class EngineRunner(
   dockerClient: DockerClient,
-  image: String = "ghcr.io/kamu-data/engine-spark:0.22.0-spark_3.1.2"
+  image: String = "ghcr.io/kamu-data/engine-spark:0.23.0-spark_3.5.0"
 ) {
   private val logger = LoggerFactory.getLogger(getClass)
+
+  def rawQuery(
+    request: RawQueryRequest,
+    workspaceDir: Path
+  ): RawQueryResponse.Success = {
+    submit[RawQueryRequest, RawQueryResponse](
+      request,
+      workspaceDir,
+      "dev.kamu.engine.spark.RawQueryApp"
+    ).asInstanceOf[RawQueryResponse.Success]
+  }
 
   def executeTransform(
     request: TransformRequest,
@@ -44,12 +62,12 @@ class EngineRunner(
     workspaceDir: Path,
     appClass: String
   )(
-    implicit dreq: Derivation[ConfigWriter[Req]],
-    dresp: Derivation[ConfigReader[Resp]]
+    implicit dreq: ConfigWriter[Req],
+    dresp: ConfigReader[Resp]
   ): Resp = {
     val engineJar = Paths.get("target", "scala-2.12", "engine.spark.jar")
 
-    if (!File(engineJar).exists)
+    if (!engineJar.toFile.exists())
       throw new RuntimeException(s"Assembly does not exist: $engineJar")
 
     val inOutDirInContainer = Paths.get("/opt/engine/in-out")

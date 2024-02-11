@@ -1,14 +1,22 @@
 /*
- * Copyright (c) 2018 kamu.dev
+ * Copyright 2018 kamu.dev
  *
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package dev.kamu.engine.spark
 
-import better.files.File
+import dev.kamu.core.utils.fs._
 import org.apache.spark.sql.{
   Column,
   DFHelper,
@@ -79,19 +87,22 @@ object DFUtils {
 
       df.write.parquet(tmpOutDir.toString)
 
-      val dataFiles = File(tmpOutDir).glob("*.snappy.parquet").toList
+      val dataFiles = tmpOutDir.toFile
+        .listFiles()
+        .filter(_.getPath.endsWith(".snappy.parquet"))
 
       if (dataFiles.length != 1)
         throw new RuntimeException(
-          "Unexpected number of files in output directory:\n" + File(tmpOutDir).list
-            .map(_.path.toString)
+          "Unexpected number of files in output directory:\n" + tmpOutDir.toFile
+            .listFiles()
+            .map(_.getPath)
             .mkString("\n")
         )
 
-      val dataFile = dataFiles.head.path
+      val dataFile = dataFiles.head
 
-      File(dataFile).moveTo(outPath)
-      File(tmpOutDir).delete()
+      dataFile.renameTo(outPath.toFile)
+      tmpOutDir.deleteRecursive()
     }
   }
 
