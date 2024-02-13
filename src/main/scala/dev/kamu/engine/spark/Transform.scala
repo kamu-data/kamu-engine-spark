@@ -170,11 +170,8 @@ class Transform(
     spark: SparkSession,
     input: TransformRequestInput
   ): DataFrame = {
-    val schema = readSchemaNormalized(spark, input.schemaFile)
-
     val df = spark.read
       .format("parquet")
-      .schema(schema)
       .parquet(input.dataPaths.map(_.toString): _*)
 
     val subset = input.offsetInterval match {
@@ -188,58 +185,6 @@ class Transform(
     // TODO: This limits parallelism, but ensures that map/filter processing of the input also results
     //  in one partition and preserves the order of events, which is important in case of retractions/corrections.
     subset.coalesce(1).orderBy(input.vocab.offsetColumn)
-  }
-
-  // TODO: This loads parquet schema from a file.
-  //  Because Spark does not support integer logical types like `(INTEGER(8, true))` we need to preprocess the schema
-  //  to avoid a crash. We should revisit this after upgrading to latest version of spark.
-  private def readSchemaNormalized(
-    spark: SparkSession,
-    schemaFile: Path
-  ): StructType = {
-    val reader = org.apache.parquet.hadoop.ParquetFileReader
-      .open(
-        HadoopInputFile.fromPath(
-          new org.apache.hadoop.fs.Path(schemaFile.toString),
-          spark.sparkContext.hadoopConfiguration
-        )
-      )
-
-    val parquetSchema = reader.getFileMetaData.getSchema
-
-    val converter =
-      new org.apache.spark.sql.execution.datasources.parquet.ParquetToSparkSchemaConverter()
-
-    logger.info(s"Read input parquet schema: $parquetSchema")
-
-    val builder = Types.buildMessage()
-    for ((t, i) <- parquetSchema.getFields.asScala.zipWithIndex) {
-      val name = parquetSchema.getFieldName(i)
-      val newTyp = {
-        // Detect and erase INT(X, unsigned) annotations
-        if (Set(
-              OriginalType.UINT_8,
-              OriginalType.UINT_16,
-              OriginalType.UINT_32,
-              OriginalType.UINT_64
-            ).contains(t.asPrimitiveType().getOriginalType)) {
-          new PrimitiveType(
-            t.getRepetition,
-            t.asPrimitiveType().getPrimitiveTypeName,
-            t.getName
-            // Erasing OriginalType
-          )
-        } else {
-          t
-        }
-      }
-      builder.addField(newTyp).named(name)
-    }
-
-    val newParquetSchema = builder.named(parquetSchema.getName)
-    logger.info(s"Normalized input parquet schema: $newParquetSchema")
-
-    converter.convert(newParquetSchema)
   }
 
   private def getInputWatermarks(
