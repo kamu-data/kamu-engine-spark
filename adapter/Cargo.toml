@@ -5,13 +5,13 @@ edition = "2021"
 
 [dependencies]
 # Kamu
-opendatafabric = { git = "https://github.com/kamu-data/kamu-cli", tag = "v0.153.0" }
+opendatafabric = { git = "https://github.com/kamu-data/kamu-cli", tag = "v0.191.5", default-features = false }
 # opendatafabric = { git = "https://github.com/kamu-data/kamu-cli", branch = "feature/unified-schema" }
 
 # RPC
 libc = "0.2"
 prost = "0.12"
-tonic = "0.10"
+tonic = "0.11"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process"] }
 tokio-stream = "0.1"
 
@@ -19,10 +19,10 @@ tokio-stream = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_with = "3"
 serde_yaml = "0.9"
-tar = "0.4"  # Checkpoitnt packing
+tar = "0.4"                                      # Checkpoitnt packing
 
 # Tracing / logging / telemetry
-tracing = "0.1"  
+tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-log = "0.2"
 tracing-bunyan-formatter = "0.3"
